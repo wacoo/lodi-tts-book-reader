@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Load Book -->
+    <Button
+        android:id="@+id/btnLoadBook"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Load Book (EPUB/PDF/TXT)" />
+
+    <!-- Scrollable Text -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="16dp">
+
+        <TextView
+            android:id="@+id/tvBookText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="18sp"
+            android:lineSpacingExtra="4dp"
+            android:scrollbars="vertical" />
+    </ScrollView>
+
+    <!-- Playback Controls -->
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center">
+
+        <Button
+            android:id="@+id/btnPlay"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Play" />
+
+        <Button
+            android:id="@+id/btnPause"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Pause"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/btnRewind"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Rewind" />
+    </LinearLayout>
+
+    <!-- Timer Controls -->
+    <Button
+        android:id="@+id/btnStartTimer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Start Timer"
+        android:layout_marginTop="16dp" />
+
+</LinearLayout>
