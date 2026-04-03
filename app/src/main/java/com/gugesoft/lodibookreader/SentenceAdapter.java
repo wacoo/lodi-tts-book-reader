@@ -37,6 +37,8 @@ public class SentenceAdapter extends RecyclerView.Adapter<SentenceAdapter.ViewHo
         TextView tv = new TextView(parent.getContext());
         tv.setPadding(20, 20, 20, 20);
         tv.setTextSize(18);
+        // Note: AutoLinkMask can sometimes interfere with custom click listeners.
+        // If clicks feel "unresponsive," consider moving Linkify to manual handling.
         tv.setAutoLinkMask(Linkify.WEB_URLS);
         tv.setLinksClickable(true);
         return new ViewHolder(tv);
@@ -51,20 +53,24 @@ public class SentenceAdapter extends RecyclerView.Adapter<SentenceAdapter.ViewHo
                 position == highlightedIndex ? Color.parseColor("#BBDEFB") : Color.TRANSPARENT
         );
 
-        // SINGLE TAP → open link
-        holder.textView.setOnClickListener(v -> {
-            if (sentence.getLink() != null) {
-                try {
-                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(sentence.getLink()));
-                    v.getContext().startActivity(intent);
-                } catch (Exception ignored) {}
-            }
-        });
-
-        // DOUBLE TAP → play
+        // 🔹 Consolidated Listener: Handles both Single and Double clicks
         holder.textView.setOnClickListener(new DoubleClickListener() {
             @Override
+            public void onClick(View v) {
+                super.onClick(v); // Manages the double-click timing logic
+
+                // SINGLE TAP → Open Link
+                if (sentence.getLink() != null) {
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(sentence.getLink()));
+                        v.getContext().startActivity(intent);
+                    } catch (Exception ignored) {}
+                }
+            }
+
+            @Override
             public void onDoubleClick(View v) {
+                // DOUBLE TAP → Play Sentence
                 if (listener != null) listener.onSentenceClick(position);
             }
         });
