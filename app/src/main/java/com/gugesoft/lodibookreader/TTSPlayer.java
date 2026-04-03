@@ -1,115 +1,106 @@
 package com.gugesoft.lodibookreader;
 
 import android.content.Context;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.PowerManager;
 import android.speech.tts.TextToSpeech;
-import android.text.Html;
-import android.widget.TextView;
-
-import java.util.ArrayList;
+import android.speech.tts.UtteranceProgressListener;
 import java.util.List;
 import java.util.Locale;
 
 public class TTSPlayer {
-
-    private Context context;
     private TextToSpeech tts;
-    private List<String> sentences;
-    private int currentSentenceIndex = 0;
-    private boolean isPaused = false;
+    private List<Sentence> sentences;
+    private int currentIndex = 0;
+    private boolean isReady = false;
+    private boolean isPlaying = false;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private OnTTSListener listener;
+    private PowerManager.WakeLock wakeLock;
 
-    private TextView tvBookText;
+    public interface OnTTSListener {
+        void onSentenceChanged(int index);
+        void onFinished();
+    }
 
-    public TTSPlayer(Context context, List<String> sentences, TextView tvBookText) {
-        this.context = context;
-        this.sentences = sentences != null ? sentences : new ArrayList<>();
-        this.tvBookText = tvBookText;
+    public TTSPlayer(Context context, OnTTSListener listener) {
+        this.listener = listener;
+        PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LodiReader:WakeLock");
 
-        tts = new TextToSpeech(context, status -> {
+        tts = new TextToSpeech(context.getApplicationContext(), status -> {
             if (status == TextToSpeech.SUCCESS) {
-                tts.setLanguage(Locale.getDefault());
-                tts.setSpeechRate(1.0f);
+                tts.setLanguage(Locale.US);
+                isReady = true;
             }
         });
-        updateTextView();
+
+        tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+            @Override
+            public void onStart(String utteranceId) {
+                mainHandler.post(() -> { if (listener != null) listener.onSentenceChanged(currentIndex); });
+            }
+            @Override
+            public void onDone(String utteranceId) {
+                if (!isPlaying) return;
+                currentIndex++;
+                mainHandler.post(() -> playNext());
+            }
+            @Override
+            public void onError(String utteranceId) { isPlaying = false; }
+        });
     }
 
-    public void loadSentences(List<String> newSentences) {
-        if (newSentences != null) {
-            sentences.clear();
-            sentences.addAll(newSentences);
-        }
-        currentSentenceIndex = 0;
-        isPaused = false;
-        updateTextView();
+    public void loadSentences(List<Sentence> sentences) {
+        this.sentences = sentences;
+        this.currentIndex = 0;
     }
+
+    public int getCurrentIndex() { return currentIndex; }
 
     public void play() {
-        if (currentSentenceIndex >= sentences.size()) {
-            currentSentenceIndex = 0;
-        }
-        isPaused = false;
-        speakNextSentence();
+        if (!isReady || sentences == null || sentences.isEmpty()) return;
+        isPlaying = true;
+        if (!wakeLock.isHeld()) wakeLock.acquire(60 * 60 * 1000L);
+        speak(sentences.get(currentIndex));
     }
 
-    public void pause() {
-        isPaused = true;
-        tts.stop();
-    }
-
-    public void rewind() {
-        if (currentSentenceIndex > 0) {
-            currentSentenceIndex = Math.max(0, currentSentenceIndex - 1);
-            updateTextView();
-        }
+    public void playFrom(int index) {
+        this.currentIndex = Math.max(0, Math.min(index, sentences.size() - 1));
         play();
     }
 
-    private void speakNextSentence() {
-        if (isPaused || currentSentenceIndex >= sentences.size()) return;
-
-        String sentence = sentences.get(currentSentenceIndex);
-        tts.speak(sentence, TextToSpeech.QUEUE_FLUSH, null, "SENTENCE_" + currentSentenceIndex);
-
-        tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
-            @Override
-            public void onStart(String utteranceId) {
-                updateTextView();
-            }
-
-            @Override
-            public void onDone(String utteranceId) {
-                if (!isPaused) {
-                    currentSentenceIndex++;
-                    speakNextSentence();
-                }
-            }
-
-            @Override
-            public void onError(String utteranceId) {
-                // Repeat the sentence on error
-                speakNextSentence();
-            }
-        });
+    private void playNext() {
+        if (currentIndex < sentences.size()) {
+            speak(sentences.get(currentIndex));
+        } else {
+            stop();
+            if (listener != null) listener.onFinished();
+        }
     }
 
-    private void updateTextView() {
-        if (tvBookText == null || sentences.isEmpty()) return;
+    private void speak(Sentence sentence) {
+        if (!isReady || sentence == null) return;
+        Bundle params = new Bundle();
+        params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, String.valueOf(sentence.id));
+        tts.speak(sentence.text, TextToSpeech.QUEUE_FLUSH, params, String.valueOf(sentence.id));
+    }
 
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < sentences.size(); i++) {
-            if (i == currentSentenceIndex) {
-                sb.append("<b>").append(sentences.get(i)).append("</b> ");
-            } else {
-                sb.append(sentences.get(i)).append(" ");
-            }
-        }
-        tvBookText.post(() -> tvBookText.setText(Html.fromHtml(sb.toString())));
+    public void pause() {
+        isPlaying = false;
+        tts.stop();
+        if (wakeLock.isHeld()) wakeLock.release();
     }
 
     public void stop() {
-        if (tts != null) {
-            tts.stop();
-            tts.shutdown();
-        }
+        pause();
+        currentIndex = 0;
+    }
+
+    public void release() {
+        stop();
+        if (tts != null) tts.shutdown();
     }
 }

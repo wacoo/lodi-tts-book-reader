@@ -1,73 +1,100 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="vertical"
-    android:padding="16dp"
+
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:background="#E3F2FD"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Load Book -->
-    <Button
-        android:id="@+id/btnLoadBook"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Load Book (EPUB/PDF/TXT)" />
-
-    <!-- Scrollable Text -->
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginTop="16dp">
-
-        <TextView
-            android:id="@+id/tvBookText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textSize="18sp"
-            android:lineSpacingExtra="4dp"
-            android:scrollbars="vertical" />
-    </ScrollView>
-
-    <!-- Playback Controls -->
+    <!-- MAIN CONTENT -->
     <LinearLayout
-        android:orientation="horizontal"
+        android:orientation="vertical"
+        android:padding="16dp"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:gravity="center">
+        android:layout_height="match_parent">
 
+        <!-- LOAD BUTTON -->
         <Button
-            android:id="@+id/btnPlay"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:text="Play" />
+            android:id="@+id/loadBookBtn"
+            android:text="📖 Load Book"
+            android:textAllCaps="false"
+            android:textSize="16sp"
+            android:backgroundTint="#42A5F5"
+            android:textColor="@android:color/white"
+            android:padding="12dp"
+            android:elevation="4dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"/>
 
-        <Button
-            android:id="@+id/btnPause"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:text="Pause"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp" />
+        <!-- LOADER -->
+        <ProgressBar
+            android:id="@+id/loader"
+            android:layout_marginTop="10dp"
+            android:visibility="gone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"/>
 
-        <Button
-            android:id="@+id/btnRewind"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:text="Rewind" />
+        <!-- RECYCLER VIEW -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerView"
+            android:layout_marginTop="12dp"
+            android:clipToPadding="false"
+            android:paddingBottom="100dp"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"/>
+
     </LinearLayout>
 
-    <!-- Timer Controls -->
-    <Button
-        android:id="@+id/btnStartTimer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Start Timer"
-        android:layout_marginTop="16dp" />
+    <!-- FLOATING BUTTONS GROUP -->
+    <LinearLayout
+        android:id="@+id/fabContainer"
+        android:orientation="vertical"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="16dp"
+        android:gravity="end"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content">
 
-</LinearLayout>
+        <!-- CLOSE -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/closeFab"
+            android:layout_marginBottom="12dp"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:contentDescription="Close"
+            app:backgroundTint="#EF5350"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+
+        <!-- REWIND -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/rewindFab"
+            android:layout_marginBottom="12dp"
+            android:src="@android:drawable/ic_media_rew"
+            android:contentDescription="Rewind"
+            app:backgroundTint="#29B6F6"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+
+        <!-- PLAY -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/playFab"
+            android:layout_marginBottom="12dp"
+            android:src="@android:drawable/ic_media_play"
+            android:contentDescription="Play"
+            app:backgroundTint="#66BB6A"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+
+        <!-- PAUSE -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/pauseFab"
+            android:src="@android:drawable/ic_media_pause"
+            android:contentDescription="Pause"
+            app:backgroundTint="#FFA726"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+
+    </LinearLayout>
+
+</FrameLayout>

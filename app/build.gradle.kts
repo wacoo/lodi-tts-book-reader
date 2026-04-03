@@ -32,11 +32,19 @@ android {
 }
 
 dependencies {
-    implementation(libs.epublib.core)
+
+    implementation(libs.epublib.core) {
+        exclude(group = "xmlpull", module = "xmlpull")
+    }
+
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.activity)
     implementation(libs.constraintlayout)
+
+    // ADD THIS:
+    implementation(libs.recyclerview)
+    implementation(libs.androidx.media)
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)

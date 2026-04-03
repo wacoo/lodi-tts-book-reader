@@ -4,25 +4,23 @@ import android.content.Context;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Handler;
+import android.os.Looper;
 
 public class VolumeController {
-
-    private AudioManager audioManager;
-    private int lastSystemVolume = -1; // previous system volume
-    private Handler handler = new Handler();
-    private Context context;
+    private final AudioManager audioManager;
+    private int targetVolume = -1;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Context context;
 
     public VolumeController(Context context) {
-        this.context = context;
+        this.context = context.getApplicationContext();
         audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
     }
 
-    // Capture the current system STREAM_MUSIC volume
     public void updateLastSystemVolume() {
-        lastSystemVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        targetVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
     }
 
-    // Fade down by 1 step
     public void fadeDownStep() {
         int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
         if (current > 0) {
@@ -30,33 +28,21 @@ public class VolumeController {
         }
     }
 
-    // Gradually restore to previous system volume
     public void restoreVolumeGradually() {
-        if (lastSystemVolume < 0) return;
-
-        handler.removeCallbacksAndMessages(null); // stop previous fade
-
-        final int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-
+        if (targetVolume < 0) return;
+        handler.removeCallbacksAndMessages(null);
         handler.post(new Runnable() {
-            int vol = current;
-
             @Override
             public void run() {
-                if (vol < lastSystemVolume) {
-                    vol++;
-                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, vol, 0);
-                    handler.postDelayed(this, 50);
-                } else if (vol > lastSystemVolume) {
-                    vol--;
-                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, vol, 0);
-                    handler.postDelayed(this, 50);
+                int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                if (current < targetVolume) {
+                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, current + 1, 0);
+                    handler.postDelayed(this, 150);
                 }
             }
         });
     }
 
-    // Play bell from res/raw/bell.mp3
     public void playBell() {
         try {
             MediaPlayer mp = MediaPlayer.create(context, R.raw.bell);
@@ -64,8 +50,6 @@ public class VolumeController {
                 mp.start();
                 mp.setOnCompletionListener(MediaPlayer::release);
             }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        } catch (Exception e) { e.printStackTrace(); }
     }
 }
