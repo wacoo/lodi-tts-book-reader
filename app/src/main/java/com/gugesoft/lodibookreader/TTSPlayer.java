@@ -58,6 +58,9 @@ public class TTSPlayer {
         this.currentIndex = 0;
     }
 
+    public void setCurrentIndex(int index) {
+        this.currentIndex = index;
+    }
     public int getCurrentIndex() { return currentIndex; }
 
     public void play() {

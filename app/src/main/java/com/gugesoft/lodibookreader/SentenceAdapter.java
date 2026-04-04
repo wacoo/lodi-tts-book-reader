@@ -20,6 +20,7 @@ public class SentenceAdapter extends RecyclerView.Adapter<SentenceAdapter.ViewHo
 
     public interface OnSentenceClickListener {
         void onSentenceClick(int position);
+        void onNavigateTo(int position); // 🔥 for local links
     }
 
     public SentenceAdapter(List<Sentence> sentences, OnSentenceClickListener listener) {
@@ -51,23 +52,48 @@ public class SentenceAdapter extends RecyclerView.Adapter<SentenceAdapter.ViewHo
                 position == highlightedIndex ? Color.parseColor("#BBDEFB") : Color.TRANSPARENT
         );
 
-        // SINGLE TAP → open link
-        holder.textView.setOnClickListener(v -> {
-            if (sentence.getLink() != null) {
-                try {
-                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(sentence.getLink()));
-                    v.getContext().startActivity(intent);
-                } catch (Exception ignored) {}
-            }
-        });
-
-        // DOUBLE TAP → play
+        // 🔥 SINGLE + DOUBLE TAP HANDLER
         holder.textView.setOnClickListener(new DoubleClickListener() {
+
             @Override
             public void onDoubleClick(View v) {
+                // ✅ DOUBLE TAP → PLAY
                 if (listener != null) listener.onSentenceClick(position);
             }
+
+            @Override
+            public void onClick(View v) {
+                super.onClick(v); // 🔥 VERY IMPORTANT (handles double tap timing)
+
+                // ✅ SINGLE TAP → HANDLE LINKS
+                if (sentence.getLink() != null) {
+
+                    // External link
+                    if (sentence.getLink().startsWith("http")) {
+                        try {
+                            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(sentence.getLink()));
+                            v.getContext().startActivity(intent);
+                        } catch (Exception ignored) {}
+                        return;
+                    }
+
+                    // 🔥 Local link (chapter navigation)
+                    int target = findSentenceIndexByLink(sentence.getLink());
+                    if (target != -1 && listener != null) {
+                        listener.onNavigateTo(target);
+                    }
+                }
+            }
         });
+    }
+
+    private int findSentenceIndexByLink(String link) {
+        for (int i = 0; i < sentences.size(); i++) {
+            if (link.equals(sentences.get(i).getLink())) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     @Override

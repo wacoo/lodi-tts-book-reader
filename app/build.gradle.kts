@@ -45,7 +45,9 @@ dependencies {
     // ADD THIS:
     implementation(libs.recyclerview)
     implementation(libs.androidx.media)
+    implementation(libs.firebase.crashlytics.buildtools)
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
+    implementation(libs.google.gson)
 }

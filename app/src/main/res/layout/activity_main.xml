@@ -94,6 +94,15 @@
             app:backgroundTint="#FFA726"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"/>
+        <Button
+            android:id="@+id/openShelfBtn"
+            android:text="📚 My Books"
+            android:textAllCaps="false"
+            android:backgroundTint="#1E88E5"
+            android:textColor="@android:color/white"
+            android:layout_marginTop="8dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"/>
 
     </LinearLayout>
 

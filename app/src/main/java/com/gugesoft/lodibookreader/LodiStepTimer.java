@@ -61,14 +61,17 @@ public class LodiStepTimer {
     public void handleShake() {
         if (!isRunning) return;
 
-        // 🔹 Always reset timer
+        // ✅ check BEFORE reset
+        boolean wasInFade = remainingTimeMs <= FADE_START_MS;
+
+        // ✅ always reset timer
         remainingTimeMs = resetTimeMs;
 
-        // 🔹 Only restore volume and play bell if in fade phase
-        //if (remainingTimeMs <= FADE_START_MS) {
+        // ✅ only if fading before shake
+        if (wasInFade) {
             volumeController.restoreVolumeGradually();
             volumeController.playBell();
-        //}
+        }
     }
 
     public void stop() {
