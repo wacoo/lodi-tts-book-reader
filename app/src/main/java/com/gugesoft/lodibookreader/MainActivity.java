@@ -165,13 +165,8 @@ public class MainActivity extends AppCompatActivity {
             try {
                 currentBookUri = uri.toString();
 
-                // ✅ Ensure we still have permission
-                try {
-                    getContentResolver().takePersistableUriPermission(
-                            uri,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                    );
-                } catch (Exception ignored) {}
+                // ❌ Do NOT call takePersistableUriPermission here.
+                // Permissions are already persisted in onActivityResult().
 
                 BookLoader.BookMetadata meta = new BookLoader().loadBookWithMetadata(this, uri);
 
@@ -187,14 +182,21 @@ public class MainActivity extends AppCompatActivity {
                     adapter.notifyDataSetChanged();
                     ttsPlayer.loadSentences(sentences);
 
-                    // ✅ Save metadata intact
-                    BookItem newBook = new BookItem(currentBookUri, meta.title, meta.author, meta.coverUri, 0);
-                    bookRepo.saveOrUpdateBook(newBook);
+                    // ✅ Only create a new BookItem if none exists
+                    BookItem existing = bookRepo.findBook(currentBookUri);
+                    if (existing == null) {
+                        existing = new BookItem(currentBookUri, meta.title, meta.author, meta.coverUri, 0);
+                        bookRepo.saveOrUpdateBook(existing);
+                    } else {
+                        // Update metadata but keep progress
+                        existing.title = meta.title;
+                        existing.author = meta.author;
+                        existing.coverUri = meta.coverUri;
+                        bookRepo.saveOrUpdateBook(existing);
+                    }
 
-                    // ✅ Restore position only
-                    BookItem saved = bookRepo.findBook(currentBookUri);
-                    int startIndex = (saved != null) ? saved.lastSentenceIndex : 0;
-
+                    // ✅ Restore saved position
+                    int startIndex = existing.lastSentenceIndex;
                     ttsPlayer.setCurrentIndex(startIndex);
                     adapter.setHighlighted(startIndex);
                     recyclerView.scrollToPosition(startIndex);
@@ -206,7 +208,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }).start();
     }
-
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
@@ -266,7 +267,6 @@ public class MainActivity extends AppCompatActivity {
         if (currentBookUri != null && ttsPlayer != null) {
             BookItem existing = bookRepo.findBook(currentBookUri);
             if (existing != null) {
-                // ✅ Only update progress, don’t overwrite title/cover
                 existing.lastSentenceIndex = ttsPlayer.getCurrentIndex();
                 bookRepo.saveOrUpdateBook(existing);
             }
