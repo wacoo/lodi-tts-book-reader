@@ -4,12 +4,14 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.*;
 import android.content.pm.PackageManager;
+import android.database.ContentObserver;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.util.Log;
@@ -48,6 +50,7 @@ public class MainActivity extends AppCompatActivity {
 
     private BookRepository bookRepo;
     private String currentBookUri;
+    private boolean isBookLoaded = false;
 
     private FloatingActionButton playFab, pauseFab, rewindFab, closeFab;
     private MaterialButton timerToggleButton;
@@ -55,13 +58,18 @@ public class MainActivity extends AppCompatActivity {
     private MediaSessionCompat mediaSession;
     private LinearLayout topBar;
     private CardView bottomControls;
-
+    private ContentObserver volumeObserver;
     private Handler hideHandler = new Handler(Looper.getMainLooper());
     private Runnable hideRunnable = () -> {
         topBar.setVisibility(View.GONE);
         bottomControls.setVisibility(View.GONE);
     };
-
+    public void setBookLoaded(boolean loaded) {
+        isBookLoaded = loaded;
+    }
+    public boolean getBookLoaded() {
+        return isBookLoaded;
+    }
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,36 +86,11 @@ public class MainActivity extends AppCompatActivity {
         timerToggleButton = findViewById(R.id.timerToggleButton);
 
         // Start hidden
-        topBar.setVisibility(View.GONE);
-        bottomControls.setVisibility(View.GONE);
-
-        // Toggle controls on tap anywhere in root layout
-        findViewById(R.id.rootLayout).setOnClickListener(v -> toggleControls());
+        topBar.setVisibility(View.VISIBLE);
+        bottomControls.setVisibility(View.VISIBLE);
 
         // RecyclerView setup
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        recyclerView.setOnTouchListener((v, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                toggleControls();
-            }
-            return false; // allow normal scrolling
-        });
-        recyclerView.setOnTouchListener((v, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                toggleControls();
-            }
-            return false; // allow normal scrolling
-        });
-
-        GestureDetector gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
-            @Override
-            public void onLongPress(MotionEvent e) {
-                toggleControls();   // show/hide controls on long press
-            }
-        });
-
-        recyclerView.setOnTouchListener((v, event) -> gestureDetector.onTouchEvent(event));
-
 
         adapter = new SentenceAdapter(sentences, new SentenceAdapter.OnSentenceClickListener() {
             @Override
@@ -126,6 +109,24 @@ public class MainActivity extends AppCompatActivity {
 
         // Timer setup
         VolumeController vc = new VolumeController(this);
+        if (!vc.isAutoChanging()) {
+            vc.captureBaselineVolume();
+        }
+        volumeObserver = new ContentObserver(new Handler()) {
+            @Override
+            public void onChange(boolean selfChange) {
+                super.onChange(selfChange);
+                if (!vc.isAutoChanging()) {
+                    vc.captureBaselineVolume();
+                }
+            }
+        };
+        getContentResolver().registerContentObserver(
+                Settings.System.CONTENT_URI,
+                true,
+                volumeObserver
+        );
+
         timerManager = new LodiStepTimer(vc, this::pauseBook);
         timerManager.setTimerListener(remainingMs -> runOnUiThread(() -> updateTimerButtonText(remainingMs)));
 
@@ -148,11 +149,13 @@ public class MainActivity extends AppCompatActivity {
                 settings.getShakeIntensity(),
                 () -> {
                     if (isTimerEnabled) {
+                        // Capture baseline volume before fading begins
                         timerManager.setResetTimeMs(settings.getTimerMs());
                         timerManager.start(settings.getTimerMs());
                         timerManager.handleShake();
                     }
                 });
+
 
         // Top bar buttons
         findViewById(R.id.loadBookBtn).setOnClickListener(v -> pickBook());
@@ -205,49 +208,44 @@ public class MainActivity extends AppCompatActivity {
         mediaSession.setCallback(new MediaSessionCompat.Callback() {
             @Override
             public void onPlay() {
-                if (!ttsPlayer.isPlaying()) ttsPlayer.play();
+                if (!ttsPlayer.isPlaying()) {
+                    ttsPlayer.play();
+                }
+                toggleControlsHide(topBar);
+                toggleControlsHide(bottomControls);
             }
 
             @Override
             public void onPause() {
-                if (ttsPlayer.isPlaying()) ttsPlayer.pause();
+                if (ttsPlayer.isPlaying()) {
+                    ttsPlayer.pause();
+                }
+                toggleControlsShow(topBar);
+                toggleControlsShow(bottomControls);
             }
         });
+
         mediaSession.setActive(true);
+
     }
 
     /** Show/hide top and bottom controls with auto-hide */
-    public void toggleControls() {
-        boolean visible = topBar.getVisibility() == View.VISIBLE;
-
-        if (visible) {
-            // Fade out
-            topBar.animate()
-                    .alpha(0f)
-                    .setDuration(300)
-                    .withEndAction(() -> topBar.setVisibility(View.GONE));
-
-            bottomControls.animate()
-                    .alpha(0f)
-                    .setDuration(300)
-                    .withEndAction(() -> bottomControls.setVisibility(View.GONE));
-
-            hideHandler.removeCallbacks(hideRunnable);
-
-        } else {
-            // Make visible first, then fade in
-            topBar.setAlpha(0f);
-            topBar.setVisibility(View.VISIBLE);
-            topBar.animate().alpha(1f).setDuration(300);
-
-            bottomControls.setAlpha(0f);
-            bottomControls.setVisibility(View.VISIBLE);
-            bottomControls.animate().alpha(1f).setDuration(300);
-
-            hideHandler.removeCallbacks(hideRunnable);
-            hideHandler.postDelayed(hideRunnable, 5000); // auto-hide after 5s
-        }
+    public void toggleControlsHide(View view) {
+        view.animate()
+                .alpha(0f)
+                .setDuration(300)
+                .withEndAction(() -> view.setVisibility(View.GONE));
     }
+
+    public void toggleControlsShow(View view) {
+        view.setAlpha(0f); // start transparent
+        view.setVisibility(View.VISIBLE); // make sure it's visible
+        view.animate()
+                .alpha(1f) // fade in to fully visible
+                .setDuration(300);
+    }
+
+
 
     private void togglePlayPause() {
         if (ttsPlayer.isPlaying()) {
@@ -323,6 +321,7 @@ public class MainActivity extends AppCompatActivity {
                     ttsPlayer.setCurrentIndex(startIndex);
                     adapter.setHighlighted(startIndex);
                     recyclerView.scrollToPosition(startIndex);
+                    isBookLoaded = true;
                 });
 
             } catch (Exception e) {
@@ -425,6 +424,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         //unregisterReceiver(mediaReceiver);
+        if (volumeObserver != null) {
+            getContentResolver().unregisterContentObserver(volumeObserver);
+        }
         ttsPlayer.release();
     }
 

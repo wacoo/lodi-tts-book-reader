@@ -5,6 +5,7 @@ import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 
 public class VolumeController {
     private final AudioManager audioManager;
@@ -31,7 +32,9 @@ public class VolumeController {
         isAutoChanging = true;
         int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
         if (current > 0) {
+            isAutoChanging = true;
             audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, current - 1, 0);
+            isAutoChanging = false;
         }
     }
 
@@ -47,19 +50,30 @@ public class VolumeController {
                     audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, current + 1, 0);
                     handler.postDelayed(this, 100);
                 } else {
+                    // force correction to baseline
+                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume, 0);
                     isAutoChanging = false;
                 }
             }
         });
     }
 
+
     public void restoreVolumeImmediately() {
         if (originalVolume >= 0) {
             handler.removeCallbacksAndMessages(null);
+
+            isAutoChanging = true; // ✅ prevent observer overwrite
+
+            int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+            Log.d("VolumeController", "Restoring from " + current + " to " + originalVolume);
+
             audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume, 0);
+
             isAutoChanging = false;
         }
     }
+
 
     public void playBell() {
         try {
@@ -70,4 +84,12 @@ public class VolumeController {
             }
         } catch (Exception e) { e.printStackTrace(); }
     }
+    public void captureBaselineVolume() {
+        if (isAutoChanging) return; // ✅ ignore app-triggered changes
+        originalVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+    }
+    public boolean isAutoChanging() {
+        return isAutoChanging;
+    }
+
 }

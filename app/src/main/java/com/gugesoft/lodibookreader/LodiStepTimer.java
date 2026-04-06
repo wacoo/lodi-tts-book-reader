@@ -81,12 +81,13 @@ public class LodiStepTimer {
             remainingTimeMs = 60 * 1000L;
         }
 
-        // Only play bell if shake happened during fade
+        // Only play bell + restore if shake happened during fade
         if (wasInFade) {
-            volumeController.restoreVolumeGradually();
-            volumeController.playBell();
+            volumeController.restoreVolumeImmediately(); // snap back baseline
+            volumeController.playBell();                 // now audible
         }
     }
+
 
 
     public void stop() {

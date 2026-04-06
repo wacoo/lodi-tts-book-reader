@@ -87,15 +87,6 @@ public class SentenceAdapter extends RecyclerView.Adapter<SentenceAdapter.ViewHo
             }
         });
 
-// 🔧 Add a separate long press override
-        holder.textView.setOnLongClickListener(v -> {
-            if (v.getContext() instanceof MainActivity) {
-                ((MainActivity) v.getContext()).toggleControls();;
-            }
-            return true; // consume the long press so system doesn’t show text-selection
-        });
-
-
     }
 
 
