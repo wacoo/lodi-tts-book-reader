@@ -8,9 +8,10 @@ import android.os.Looper;
 
 public class VolumeController {
     private final AudioManager audioManager;
-    private int targetVolume = -1;
+    private int originalVolume = -1;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Context context;
+    private boolean isAutoChanging = false;
 
     public VolumeController(Context context) {
         this.context = context.getApplicationContext();
@@ -18,10 +19,16 @@ public class VolumeController {
     }
 
     public void updateLastSystemVolume() {
-        targetVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        // If we are currently fading or restoring, don't overwrite the original volume
+        // because the current system volume is not the user's intended "base" volume.
+        if (isAutoChanging && originalVolume != -1) {
+            return;
+        }
+        originalVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
     }
 
     public void fadeDownStep() {
+        isAutoChanging = true;
         int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
         if (current > 0) {
             audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, current - 1, 0);
@@ -29,18 +36,29 @@ public class VolumeController {
     }
 
     public void restoreVolumeGradually() {
-        if (targetVolume < 0) return;
+        if (originalVolume < 0) return;
+        isAutoChanging = true;
         handler.removeCallbacksAndMessages(null);
         handler.post(new Runnable() {
             @Override
             public void run() {
                 int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-                if (current < targetVolume) {
+                if (current < originalVolume) {
                     audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, current + 1, 0);
-                    handler.postDelayed(this, 150);
+                    handler.postDelayed(this, 100);
+                } else {
+                    isAutoChanging = false;
                 }
             }
         });
+    }
+
+    public void restoreVolumeImmediately() {
+        if (originalVolume >= 0) {
+            handler.removeCallbacksAndMessages(null);
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume, 0);
+            isAutoChanging = false;
+        }
     }
 
     public void playBell() {

@@ -8,7 +8,7 @@ import android.hardware.SensorManager;
 
 public class ShakeDetector implements SensorEventListener {
 
-    private static final float SHAKE_THRESHOLD = 12.0f; // sensitivity
+    private float shakeThreshold = 12.0f; // sensitivity
     private static final int SHAKE_INTERVAL_MS = 1000;
 
     private long lastShakeTime = 0;
@@ -18,7 +18,8 @@ public class ShakeDetector implements SensorEventListener {
     private SensorManager sensorManager;
     private Sensor accelerometer;
 
-    public ShakeDetector(Context context, Runnable onShakeCallback) {
+    public ShakeDetector(Context context, float shakeIntensity, Runnable onShakeCallback) {
+        this.shakeThreshold = shakeIntensity;
         this.onShakeCallback = onShakeCallback;
 
         sensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
@@ -26,6 +27,10 @@ public class ShakeDetector implements SensorEventListener {
         if (sensorManager != null) {
             accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         }
+    }
+
+    public void setShakeThreshold(float shakeThreshold) {
+        this.shakeThreshold = shakeThreshold;
     }
 
     public void start() {
@@ -55,7 +60,7 @@ public class ShakeDetector implements SensorEventListener {
 
         long currentTime = System.currentTimeMillis();
 
-        if (acceleration > SHAKE_THRESHOLD) {
+        if (acceleration > shakeThreshold) {
             if (currentTime - lastShakeTime > SHAKE_INTERVAL_MS) {
 
                 lastShakeTime = currentTime;

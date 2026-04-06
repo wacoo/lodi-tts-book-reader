@@ -5,23 +5,29 @@ import android.os.Looper;
 
 public class LodiStepTimer {
 
+    public interface TimerListener {
+        void onTick(long remainingMs);
+    }
+
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private TimerListener listener;
 
     private long totalTimeMs, remainingTimeMs;
     private boolean isRunning = false;
-    private long resetTimeMs = 20 * 1000; // 20 seconds
+    private long resetTimeMs = 60 * 1000; // Default 1 minute
     private final VolumeController volumeController;
     private final Runnable onFinish;
 
-    // Fade starts at last 10 seconds
-    private static final long FADE_START_MS = 10 * 1000;
-
-    // 🔹 Configurable shake intensity (default value)
-    private float shakeIntensity = 12.0f;
+    // Fade duration
+    private long fadeDurationMs = 10 * 1000;
 
     public LodiStepTimer(VolumeController vc, Runnable finish) {
         this.volumeController = vc;
         this.onFinish = finish;
+    }
+
+    public void setTimerListener(TimerListener listener) {
+        this.listener = listener;
     }
 
     private final Runnable timerRunnable = new Runnable() {
@@ -31,8 +37,12 @@ public class LodiStepTimer {
 
             remainingTimeMs -= 1000;
 
-            // Fade when last 10 seconds remain
-            if (remainingTimeMs <= FADE_START_MS) {
+            if (listener != null) {
+                listener.onTick(remainingTimeMs);
+            }
+
+            // Fade when remaining time is less than or equal to fade duration
+            if (remainingTimeMs <= fadeDurationMs) {
                 volumeController.fadeDownStep();
             }
 
@@ -61,13 +71,11 @@ public class LodiStepTimer {
     public void handleShake() {
         if (!isRunning) return;
 
-        // ✅ check BEFORE reset
-        boolean wasInFade = remainingTimeMs <= FADE_START_MS;
+        boolean wasInFade = remainingTimeMs <= fadeDurationMs;
 
-        // ✅ always reset timer
+        // Reset timer to the configured reset time (the full duration set in settings)
         remainingTimeMs = resetTimeMs;
 
-        // ✅ only if fading before shake
         if (wasInFade) {
             volumeController.restoreVolumeGradually();
             volumeController.playBell();
@@ -84,16 +92,15 @@ public class LodiStepTimer {
         return isRunning;
     }
 
-    // 🔹 Getter and Setter for shake intensity
-    public float getShakeIntensity() {
-        return shakeIntensity;
-    }
-
-    public void setShakeIntensity(float shakeIntensity) {
-        this.shakeIntensity = shakeIntensity;
+    public long getRemainingTimeMs() {
+        return remainingTimeMs;
     }
 
     public void setResetTimeMs(long resetTimeMs) {
         this.resetTimeMs = resetTimeMs;
+    }
+
+    public void setFadeStartMs(long fadeDurationMs) {
+        this.fadeDurationMs = fadeDurationMs;
     }
 }

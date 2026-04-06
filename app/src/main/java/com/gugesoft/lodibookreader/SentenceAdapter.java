@@ -48,27 +48,30 @@ public class SentenceAdapter extends RecyclerView.Adapter<SentenceAdapter.ViewHo
         Sentence sentence = sentences.get(position);
         holder.textView.setText(sentence.getText());
 
-        holder.textView.setBackgroundColor(
-                position == highlightedIndex ? Color.parseColor("#BBDEFB") : Color.TRANSPARENT
-        );
+        // Apply user settings
+        SettingsManager settings = new SettingsManager(holder.itemView.getContext());
+        holder.textView.setTextColor(settings.getFontColor());
+        holder.textView.setTextSize(settings.getFontSize());
+
+        // Highlight logic stays:
+        if (position == highlightedIndex) {
+            holder.textView.setBackgroundColor(Color.parseColor("#BBDEFB")); // highlight
+        } else {
+            holder.textView.setBackgroundColor(Color.TRANSPARENT);
+        }
 
         // 🔥 SINGLE + DOUBLE TAP HANDLER
         holder.textView.setOnClickListener(new DoubleClickListener() {
-
             @Override
             public void onDoubleClick(View v) {
-                // ✅ DOUBLE TAP → PLAY
                 if (listener != null) listener.onSentenceClick(position);
             }
 
             @Override
             public void onClick(View v) {
-                super.onClick(v); // 🔥 VERY IMPORTANT (handles double tap timing)
+                super.onClick(v);
 
-                // ✅ SINGLE TAP → HANDLE LINKS
                 if (sentence.getLink() != null) {
-
-                    // External link
                     if (sentence.getLink().startsWith("http")) {
                         try {
                             Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(sentence.getLink()));
@@ -76,8 +79,6 @@ public class SentenceAdapter extends RecyclerView.Adapter<SentenceAdapter.ViewHo
                         } catch (Exception ignored) {}
                         return;
                     }
-
-                    // 🔥 Local link (chapter navigation)
                     int target = findSentenceIndexByLink(sentence.getLink());
                     if (target != -1 && listener != null) {
                         listener.onNavigateTo(target);

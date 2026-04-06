@@ -53,6 +53,10 @@ public class TTSPlayer {
         });
     }
 
+    public boolean isPlaying() {
+        return isPlaying;
+    }
+
     public void loadSentences(List<Sentence> sentences) {
         this.sentences = sentences;
         this.currentIndex = 0;

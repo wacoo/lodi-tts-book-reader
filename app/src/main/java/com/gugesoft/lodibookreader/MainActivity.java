@@ -17,15 +17,17 @@ import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final int PICK_BOOK_REQUEST = 1;
-
+    private SettingsManager settings;
     private RecyclerView recyclerView;
     private SentenceAdapter adapter;
     private List<Sentence> sentences = new ArrayList<>();
@@ -38,6 +40,8 @@ public class MainActivity extends AppCompatActivity {
     private String currentBookUri;
 
     private FloatingActionButton playFab, pauseFab, rewindFab, closeFab;
+    private MaterialButton timerToggleButton;
+    private boolean isTimerEnabled = true;
 
     private final BroadcastReceiver mediaReceiver = new BroadcastReceiver() {
         @Override
@@ -49,7 +53,6 @@ public class MainActivity extends AppCompatActivity {
             else if (ReadingService.ACTION_REWIND.equals(action)) rewindSentence();
             else if (ReadingService.ACTION_CLOSE.equals(action)) {
                 stopTtsOnly();
-                finish();
             }
         }
     };
@@ -58,11 +61,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        //cleanupPreviousBook();
         setContentView(R.layout.activity_main);
-
+        settings = new SettingsManager(this);
         bookRepo = new BookRepository(this);
-        // 🔐 Notification permission
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                     != PackageManager.PERMISSION_GRANTED) {
@@ -71,7 +73,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // 📚 Recycler
         recyclerView = findViewById(R.id.recyclerView);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
@@ -79,7 +80,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onSentenceClick(int position) {
                 ttsPlayer.playFrom(position);
-                timerManager.start(AppConfig.TIMER_RESET_MS);
+                startTimerWithCurrentSettings();
                 updateService(true);
             }
 
@@ -91,9 +92,9 @@ public class MainActivity extends AppCompatActivity {
 
         recyclerView.setAdapter(adapter);
 
-        // 🔊 Systems
         VolumeController vc = new VolumeController(this);
         timerManager = new LodiStepTimer(vc, this::pauseBook);
+        timerManager.setTimerListener(remainingMs -> runOnUiThread(() -> updateTimerButtonText(remainingMs)));
 
         ttsPlayer = new TTSPlayer(this, new TTSPlayer.OnTTSListener() {
             @Override
@@ -108,14 +109,39 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        shakeDetector = new ShakeDetector(this, () -> timerManager.handleShake());
+        shakeDetector = new ShakeDetector(this,
+                settings.getShakeIntensity(),
+                () -> {
+                    if (isTimerEnabled) {
+                        // Reset timer immediately
+                        timerManager.setResetTimeMs(settings.getTimerMs());
+                        timerManager.start(settings.getTimerMs());
+                    }
+                });
 
-        // 🎮 Buttons
         findViewById(R.id.loadBookBtn).setOnClickListener(v -> pickBook());
-
         findViewById(R.id.openShelfBtn).setOnClickListener(v ->
                 startActivity(new Intent(this, BookshelfActivity.class))
         );
+        findViewById(R.id.openSettingsBtn).setOnClickListener(v ->
+                startActivity(new Intent(this, SettingsActivity.class))
+        );
+
+        timerToggleButton = findViewById(R.id.timerToggleButton);
+        timerToggleButton.setOnClickListener(v -> {
+            isTimerEnabled = !isTimerEnabled;
+            if (!isTimerEnabled) {
+                timerManager.stop();
+                timerToggleButton.setText("⏳ Off");
+                timerToggleButton.setTextColor(0xFF333333);
+            } else {
+                if (ttsPlayer != null && ttsPlayer.isPlaying()) {
+                    startTimerWithCurrentSettings();
+                } else {
+                    timerToggleButton.setText("⏳ On");
+                }
+            }
+        });
 
         playFab = findViewById(R.id.playFab);
         pauseFab = findViewById(R.id.pauseFab);
@@ -125,27 +151,45 @@ public class MainActivity extends AppCompatActivity {
         playFab.setOnClickListener(v -> playBook());
         pauseFab.setOnClickListener(v -> pauseBook());
         rewindFab.setOnClickListener(v -> rewindSentence());
-
         closeFab.setOnClickListener(v -> {
             stopTtsOnly();
             stopService(new Intent(this, ReadingService.class));
             finish();
         });
 
-        // 🔔 Receiver
         IntentFilter filter = new IntentFilter();
         filter.addAction(ReadingService.ACTION_PLAY);
         filter.addAction(ReadingService.ACTION_PAUSE);
         filter.addAction(ReadingService.ACTION_REWIND);
         filter.addAction(ReadingService.ACTION_CLOSE);
-
         registerReceiver(mediaReceiver, filter);
 
-        // 📖 OPEN FROM SHELF
         String uriFromShelf = getIntent().getStringExtra("BOOK_URI");
         if (uriFromShelf != null) {
             loadBookFromUri(Uri.parse(uriFromShelf));
         }
+    }
+
+    private void updateTimerButtonText(long remainingMs) {
+        if (!isTimerEnabled) return;
+        
+        int minutes = (int) (remainingMs / 1000) / 60;
+        int seconds = (int) (remainingMs / 1000) % 60;
+        String time = String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds);
+        timerToggleButton.setText("⏳ " + time);
+        
+        // Change color to blue if active
+        timerToggleButton.setTextColor(0xFF2196F3);
+    }
+
+    private void startTimerWithCurrentSettings() {
+        if (!isTimerEnabled) {
+            timerManager.stop();
+            return;
+        }
+        timerManager.setResetTimeMs(settings.getTimerMs());
+        timerManager.setFadeStartMs(settings.getFadeMs());
+        timerManager.start(settings.getTimerMs());
     }
 
     private void pickBook() {
@@ -164,10 +208,6 @@ public class MainActivity extends AppCompatActivity {
         new Thread(() -> {
             try {
                 currentBookUri = uri.toString();
-
-                // ❌ Do NOT call takePersistableUriPermission here.
-                // Permissions are already persisted in onActivityResult().
-
                 BookLoader.BookMetadata meta = new BookLoader().loadBookWithMetadata(this, uri);
 
                 runOnUiThread(() -> {
@@ -176,26 +216,22 @@ public class MainActivity extends AppCompatActivity {
                         return;
                     }
 
-                    // ✅ Always reload sentences
                     sentences.clear();
                     sentences.addAll(meta.sentences);
                     adapter.notifyDataSetChanged();
                     ttsPlayer.loadSentences(sentences);
 
-                    // ✅ Only create a new BookItem if none exists
                     BookItem existing = bookRepo.findBook(currentBookUri);
                     if (existing == null) {
                         existing = new BookItem(currentBookUri, meta.title, meta.author, meta.coverUri, 0);
                         bookRepo.saveOrUpdateBook(existing);
                     } else {
-                        // Update metadata but keep progress
                         existing.title = meta.title;
                         existing.author = meta.author;
                         existing.coverUri = meta.coverUri;
                         bookRepo.saveOrUpdateBook(existing);
                     }
 
-                    // ✅ Restore saved position
                     int startIndex = existing.lastSentenceIndex;
                     ttsPlayer.setCurrentIndex(startIndex);
                     adapter.setHighlighted(startIndex);
@@ -215,7 +251,6 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == PICK_BOOK_REQUEST && resultCode == RESULT_OK && data != null) {
             Uri uri = data.getData();
             if (uri != null) {
-                // 🔐 Take Persistable permissions for both Read and Write
                 final int takeFlags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
                 getContentResolver().takePersistableUriPermission(uri, takeFlags);
                 loadBookFromUri(uri);
@@ -225,7 +260,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void playBook() {
         ttsPlayer.play();
-        timerManager.start(AppConfig.TIMER_RESET_MS);
+        startTimerWithCurrentSettings();
         updateService(true);
     }
 
@@ -233,6 +268,10 @@ public class MainActivity extends AppCompatActivity {
         ttsPlayer.pause();
         timerManager.stop();
         updateService(false);
+        if (isTimerEnabled) {
+             timerToggleButton.setText("⏳ On");
+             timerToggleButton.setTextColor(0xFF333333);
+        }
     }
 
     private void rewindSentence() {
@@ -245,6 +284,10 @@ public class MainActivity extends AppCompatActivity {
         ttsPlayer.stop();
         timerManager.stop();
         updateService(false);
+        if (isTimerEnabled) {
+            timerToggleButton.setText("⏳ On");
+            timerToggleButton.setTextColor(0xFF333333);
+        }
     }
 
     private void updateService(boolean isPlaying) {
@@ -256,8 +299,17 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        shakeDetector.setShakeThreshold(settings.getShakeIntensity());
         shakeDetector.start();
+
+        // Apply paper color to the whole RecyclerView
+        findViewById(R.id.rootLayout).setBackgroundColor(settings.getPaperColor());
+        recyclerView.setBackgroundColor(settings.getPaperColor());
+
+        // Refresh adapter so font size/color apply
+        adapter.notifyDataSetChanged();
     }
+
 
     @Override
     protected void onPause() {
@@ -273,11 +325,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        setIntent(intent); // Important: This updates the Activity's intent
+        setIntent(intent);
         String uriFromShelf = intent.getStringExtra("BOOK_URI");
         if (uriFromShelf != null) {
             loadBookFromUri(Uri.parse(uriFromShelf));
@@ -290,15 +341,11 @@ public class MainActivity extends AppCompatActivity {
         unregisterReceiver(mediaReceiver);
         ttsPlayer.release();
     }
-    // Add this method anywhere in MainActivity class
+
     private void cleanupPreviousBook() {
         try {
-            if (ttsPlayer != null) {
-                ttsPlayer.stop();
-            }
-            if (timerManager != null) {
-                timerManager.stop();
-            }
+            if (ttsPlayer != null) ttsPlayer.stop();
+            if (timerManager != null) timerManager.stop();
             stopService(new Intent(this, ReadingService.class));
         } catch (Exception e) {
             Log.w("MainActivity", "Cleanup warning", e);
