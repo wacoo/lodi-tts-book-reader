@@ -76,11 +76,18 @@ public class LodiStepTimer {
         // Reset timer to the configured reset time (the full duration set in settings)
         remainingTimeMs = resetTimeMs;
 
+        // Enforce minimum 1 minute
+        if (remainingTimeMs < 60 * 1000L) {
+            remainingTimeMs = 60 * 1000L;
+        }
+
+        // Only play bell if shake happened during fade
         if (wasInFade) {
             volumeController.restoreVolumeGradually();
             volumeController.playBell();
         }
     }
+
 
     public void stop() {
         isRunning = false;

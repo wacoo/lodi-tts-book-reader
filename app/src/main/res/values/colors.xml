@@ -1,5 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
+<!-- Background for the top controls bar -->
+<color name="topControlsBackground">#E0E0E0</color> <!-- light gray -->
+
+<!-- Accent colors for buttons -->
+<color name="playButtonColor">#4CAF50</color>   <!-- green -->
+<color name="pauseButtonColor">#FF9800</color> <!-- orange -->
+<color name="rewindButtonColor">#2196F3</color> <!-- blue -->
+<color name="closeButtonColor">#EF5350</color> <!-- red -->
+
+<!-- Text colors -->
+<color name="primaryText">#333333</color>
+<color name="secondaryText">#666666</color>
+
+<!-- Background for the whole app -->
+<color name="appBackground">#F5F5F7</color>
+
+<color name="black">#FF000000</color>
+<color name="white">#FFFFFFFF</color>
 </resources>

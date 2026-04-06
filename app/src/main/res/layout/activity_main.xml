@@ -4,8 +4,9 @@
     android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F5F5F7">
+    android:background="@color/appBackground">
 
+    <!-- Top Bar with Secondary Actions -->
     <!-- Top Bar with Secondary Actions -->
     <LinearLayout
         android:id="@+id/topBar"
@@ -13,59 +14,62 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:padding="8dp"
+        android:background="@color/topControlsBackground"
         app:layout_constraintTop_toTopOf="parent">
 
+        <!-- Import Button -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/loadBookBtn"
             style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="📥 Import"
+            android:text="📥"
             android:textAllCaps="false"
-            android:textColor="#333333"
-            app:icon="@android:drawable/ic_input_add"
-            app:iconTint="#333333" />
+            android:textColor="@color/primaryText"
+            android:textSize="25sp"
+            app:iconTint="@color/primaryText" />
 
+        <!-- Library Button -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/openShelfBtn"
             style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="📚 Library"
+            android:text="📚"
             android:textAllCaps="false"
-            android:textColor="#333333"
-            app:icon="@android:drawable/ic_menu_agenda"
-            app:iconTint="#333333" />
+            android:textColor="@color/primaryText"
+            android:textSize="25sp"
+            app:iconTint="@color/primaryText" />
 
+        <!-- Settings Button -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/openSettingsBtn"
             style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="⚙️ Settings"
+            android:text="⚙️"
             android:textAllCaps="false"
-            android:textColor="#333333"
-            app:icon="@android:drawable/ic_menu_preferences"
-            app:iconTint="#333333" />
-    </LinearLayout>
+            android:textColor="@color/primaryText"
+            android:textSize="25sp"
+            app:iconTint="@color/primaryText" />
 
-    <!-- Timer Toggle Button - Positioned exactly below Library -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/timerToggleButton"
-        style="@style/Widget.MaterialComponents.Button.TextButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="⏳ Off"
-        android:textAllCaps="false"
-        android:textColor="#333333"
-        app:icon="@android:drawable/ic_lock_idle_alarm"
-        app:iconTint="#333333"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/topBar" />
+        <!-- Timer Toggle Button (side by side) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/timerToggleButton"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="4dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Off"
+            android:textAllCaps="false"
+            android:textColor="@color/primaryText"
+            app:icon="@android:drawable/ic_lock_idle_alarm"
+            app:iconSize="32dp"
+            app:iconTint="@color/primaryText" />
+    </LinearLayout>
 
     <!-- Main Content Area -->
     <androidx.recyclerview.widget.RecyclerView
@@ -74,8 +78,8 @@
         android:layout_height="0dp"
         android:clipToPadding="false"
         android:paddingBottom="100dp"
-        app:layout_constraintBottom_toTopOf="@id/bottomControls"
-        app:layout_constraintTop_toBottomOf="@id/timerToggleButton" />
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintBottom_toTopOf="@id/bottomControls" />
 
     <!-- Bottom Controls Area -->
     <androidx.cardview.widget.CardView
@@ -94,13 +98,14 @@
             android:orientation="horizontal"
             android:padding="16dp">
 
+            <!-- Floating buttons -->
             <com.google.android.material.floatingactionbutton.FloatingActionButton
                 android:id="@+id/closeFab"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="24dp"
                 android:contentDescription="Close"
-                app:backgroundTint="#EF5350"
+                app:backgroundTint="@color/closeButtonColor"
                 app:fabSize="mini"
                 app:srcCompat="@android:drawable/ic_menu_close_clear_cancel"
                 app:tint="@android:color/white" />
@@ -111,7 +116,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="24dp"
                 android:contentDescription="Rewind"
-                app:backgroundTint="#2196F3"
+                app:backgroundTint="@color/rewindButtonColor"
                 app:srcCompat="@android:drawable/ic_media_rew"
                 app:tint="@android:color/white" />
 
@@ -121,7 +126,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="24dp"
                 android:contentDescription="Play"
-                app:backgroundTint="#4CAF50"
+                app:backgroundTint="@color/playButtonColor"
                 app:fabSize="normal"
                 app:srcCompat="@android:drawable/ic_media_play"
                 app:tint="@android:color/white" />
@@ -131,7 +136,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:contentDescription="Pause"
-                app:backgroundTint="#FF9800"
+                app:backgroundTint="@color/pauseButtonColor"
                 app:fabSize="normal"
                 app:srcCompat="@android:drawable/ic_media_pause"
                 app:tint="@android:color/white" />

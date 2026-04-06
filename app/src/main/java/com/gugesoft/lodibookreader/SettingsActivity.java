@@ -28,14 +28,14 @@ public class SettingsActivity extends AppCompatActivity {
         SeekBar timerSeek = findViewById(R.id.seekTimer);
         TextView timerLabel = findViewById(R.id.timerLabel);
 
-        // Initialization
-        timerSeek.setMax(120); // up to 120 minutes
+        timerSeek.setMax(120); // 1–120 minutes
         int timerMin = (int) (settings.getTimerMs() / (60 * 1000));
+        if (timerMin < 1) timerMin = 1; // enforce minimum
         timerSeek.setProgress(timerMin);
         timerLabel.setText("Timer: " + timerMin + " min");
 
-        // Listener
         timerSeek.setOnSeekBarChangeListener(new SimpleSeekBar(value -> {
+            if (value < 1) value = 1; // enforce minimum
             settings.setTimerMs(value * 60 * 1000L); // store minutes in ms
             timerLabel.setText("Timer: " + value + " min");
         }));
@@ -44,6 +44,7 @@ public class SettingsActivity extends AppCompatActivity {
         SeekBar fadeSeek = findViewById(R.id.seekFade);
         TextView fadeLabel = findViewById(R.id.fadeLabel);
 
+        fadeSeek.setMax(60); // up to 60 seconds
         int fadeSec = (int) (settings.getFadeMs() / 1000);
         fadeSeek.setProgress(fadeSec);
         fadeLabel.setText("Fade: " + fadeSec + " sec");
@@ -57,6 +58,7 @@ public class SettingsActivity extends AppCompatActivity {
         SeekBar shakeSeek = findViewById(R.id.seekShake);
         TextView shakeLabel = findViewById(R.id.shakeLabel);
 
+        shakeSeek.setMax(30);
         int shakeVal = (int) settings.getShakeIntensity();
         shakeSeek.setProgress(shakeVal);
         shakeLabel.setText("Shake: " + shakeVal);
@@ -70,6 +72,7 @@ public class SettingsActivity extends AppCompatActivity {
         SeekBar fontSeek = findViewById(R.id.seekFont);
         TextView fontLabel = findViewById(R.id.fontLabel);
 
+        fontSeek.setMax(40);
         int fontSize = settings.getFontSize();
         fontSeek.setProgress(fontSize);
         fontLabel.setText("Font Size: " + fontSize);
@@ -118,7 +121,7 @@ public class SettingsActivity extends AppCompatActivity {
         // ===== RESET BUTTON =====
         Button resetBtn = findViewById(R.id.resetBtn);
         resetBtn.setOnClickListener(v -> {
-            settings.setTimerMs(60 * 60 * 1000L);
+            settings.setTimerMs(60 * 60 * 1000L); // default 60 minutes
             settings.setFadeMs(10 * 1000);
             settings.setShakeIntensity(12.0f);
             settings.setFontSize(16);
