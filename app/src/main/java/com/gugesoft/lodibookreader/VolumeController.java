@@ -19,61 +19,46 @@ public class VolumeController {
         audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
     }
 
-    public void updateLastSystemVolume() {
-        // If we are currently fading or restoring, don't overwrite the original volume
-        // because the current system volume is not the user's intended "base" volume.
-        if (isAutoChanging && originalVolume != -1) {
-            return;
-        }
+    /**
+     * Captures the current system volume as the baseline.
+     * Only captures if we aren't currently performing an automated fade.
+     */
+    public void captureBaselineVolume() {
+        if (isAutoChanging) return;
         originalVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        Log.d("VolumeController", "Baseline captured: " + originalVolume);
     }
 
-    public void fadeDownStep() {
-        isAutoChanging = true;
+    /**
+     * Smoothly reduces volume based on the percentage of remaining fade time.
+     */
+    public void applyFade(long remainingMs, long totalFadeDurationMs) {
+        if (originalVolume <= 0 || totalFadeDurationMs <= 0) return;
+        
+        // Calculate target volume: scale baseline volume by percentage of remaining fade time
+        int target = (int) Math.ceil((double) originalVolume * remainingMs / totalFadeDurationMs);
+        
         int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-        if (current > 0) {
+        // Only lower the volume, never increase it during fade
+        if (target < current) {
             isAutoChanging = true;
-            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, current - 1, 0);
-            isAutoChanging = false;
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0);
+            // Briefly delay resetting isAutoChanging to allow system events to settle
+            handler.postDelayed(() -> isAutoChanging = false, 200);
         }
     }
 
-    public void restoreVolumeGradually() {
-        if (originalVolume < 0) return;
-        isAutoChanging = true;
-        handler.removeCallbacksAndMessages(null);
-        handler.post(new Runnable() {
-            @Override
-            public void run() {
-                int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-                if (current < originalVolume) {
-                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, current + 1, 0);
-                    handler.postDelayed(this, 100);
-                } else {
-                    // force correction to baseline
-                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume, 0);
-                    isAutoChanging = false;
-                }
-            }
-        });
-    }
-
-
-    public void restoreVolumeImmediately() {
+    /**
+     * Instantly restores volume to the captured baseline.
+     */
+    public void restoreVolume() {
         if (originalVolume >= 0) {
-            handler.removeCallbacksAndMessages(null);
-
-            isAutoChanging = true; // ✅ prevent observer overwrite
-
-            int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-            Log.d("VolumeController", "Restoring from " + current + " to " + originalVolume);
-
+            isAutoChanging = true;
             audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume, 0);
-
-            isAutoChanging = false;
+            handler.postDelayed(() -> isAutoChanging = false, 200);
+            Log.d("VolumeController", "Volume restored to baseline: " + originalVolume);
         }
     }
-
 
     public void playBell() {
         try {
@@ -82,14 +67,12 @@ public class VolumeController {
                 mp.start();
                 mp.setOnCompletionListener(MediaPlayer::release);
             }
-        } catch (Exception e) { e.printStackTrace(); }
+        } catch (Exception e) { 
+            Log.e("VolumeController", "Error playing bell", e);
+        }
     }
-    public void captureBaselineVolume() {
-        if (isAutoChanging) return; // ✅ ignore app-triggered changes
-        originalVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-    }
+
     public boolean isAutoChanging() {
         return isAutoChanging;
     }
-
 }

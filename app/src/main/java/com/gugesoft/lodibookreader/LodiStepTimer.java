@@ -41,14 +41,16 @@ public class LodiStepTimer {
                 listener.onTick(remainingTimeMs);
             }
 
-            // Fade when remaining time is less than or equal to fade duration
-            if (remainingTimeMs <= fadeDurationMs) {
-                volumeController.fadeDownStep();
+            // Smooth fade during the fade duration
+            if (remainingTimeMs <= fadeDurationMs && remainingTimeMs >= 0) {
+                volumeController.applyFade(remainingTimeMs, fadeDurationMs);
             }
 
             if (remainingTimeMs <= 0) {
                 isRunning = false;
-                onFinish.run();
+                if (onFinish != null) {
+                    onFinish.run();
+                }
                 return;
             }
 
@@ -63,7 +65,8 @@ public class LodiStepTimer {
         this.remainingTimeMs = durationMs;
         this.isRunning = true;
 
-        volumeController.updateLastSystemVolume();
+        // Capture user volume as baseline before any fade starts
+        volumeController.captureBaselineVolume();
 
         handler.post(timerRunnable);
     }
@@ -71,29 +74,32 @@ public class LodiStepTimer {
     public void handleShake() {
         if (!isRunning) return;
 
-        boolean wasInFade = remainingTimeMs <= fadeDurationMs;
+        boolean wasInFade = remainingMsInFadePeriod();
 
-        // Reset timer to the configured reset time (the full duration set in settings)
+        // Reset timer to the configured reset time
         remainingTimeMs = resetTimeMs;
 
-        // Enforce minimum 1 minute
-        if (remainingTimeMs < 60 * 1000L) {
-            remainingTimeMs = 60 * 1000L;
+        // Immediate UI feedback
+        if (listener != null) {
+            listener.onTick(remainingTimeMs);
         }
 
-        // Only play bell + restore if shake happened during fade
         if (wasInFade) {
-            volumeController.restoreVolumeImmediately(); // snap back baseline
-            volumeController.playBell();                 // now audible
+            // Restore volume and play bell ONLY if we were in the fade period
+            volumeController.restoreVolume();
+            volumeController.playBell();
         }
     }
 
-
+    private boolean remainingMsInFadePeriod() {
+        return remainingTimeMs <= fadeDurationMs;
+    }
 
     public void stop() {
         isRunning = false;
         handler.removeCallbacksAndMessages(null);
-        volumeController.restoreVolumeGradually();
+        // Ensure volume is back to normal when timer is stopped/disabled
+        volumeController.restoreVolume();
     }
 
     public boolean isRunning() {
