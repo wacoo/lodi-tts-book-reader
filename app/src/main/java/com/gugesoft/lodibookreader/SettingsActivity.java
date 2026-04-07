@@ -127,6 +127,7 @@ public class SettingsActivity extends AppCompatActivity {
             settings.setFontSize(16);
             settings.setPaperColor(0xFFFFFFFF);
             settings.setFontColor(0xFF000000);
+            settings.setFontFamily("sans-serif");
 
             timerSeek.setProgress(60);
             fadeSeek.setProgress(10);

@@ -12,9 +12,14 @@ public abstract class DoubleClickListener implements View.OnClickListener {
         long clickTime = SystemClock.elapsedRealtime();
         if (clickTime - lastClickTime < DOUBLE_CLICK_TIME_DELTA) {
             onDoubleClick(v);
+        } else {
+            onSingleClick(v);
         }
         lastClickTime = clickTime;
     }
 
     public abstract void onDoubleClick(View v);
+
+    public void onSingleClick(View v) {
+    }
 }

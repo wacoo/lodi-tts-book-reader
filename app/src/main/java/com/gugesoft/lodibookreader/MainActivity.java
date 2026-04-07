@@ -5,18 +5,13 @@ import android.annotation.SuppressLint;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.database.ContentObserver;
-import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
-import android.support.v4.media.session.MediaSessionCompat;
-import android.support.v4.media.session.PlaybackStateCompat;
 import android.util.Log;
-import android.view.GestureDetector;
-import android.view.MotionEvent;
 import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.Toast;
@@ -42,7 +37,7 @@ public class MainActivity extends AppCompatActivity {
     private SettingsManager settings;
     private RecyclerView recyclerView;
     private SentenceAdapter adapter;
-    private List<Sentence> sentences = new ArrayList<>();
+    private final List<Sentence> sentences = new ArrayList<>();
 
     private TTSPlayer ttsPlayer;
     private LodiStepTimer timerManager;
@@ -50,46 +45,53 @@ public class MainActivity extends AppCompatActivity {
 
     private BookRepository bookRepo;
     private String currentBookUri;
-    private boolean isBookLoaded = false;
 
-    private FloatingActionButton playFab, pauseFab, rewindFab, closeFab;
     private MaterialButton timerToggleButton;
-    private boolean isTimerEnabled = true;
-    private MediaSessionCompat mediaSession;
-    private LinearLayout topBar;
     private CardView bottomControls;
-    private ContentObserver volumeObserver;
-    private Handler hideHandler = new Handler(Looper.getMainLooper());
-    private Runnable hideRunnable = () -> {
-        topBar.setVisibility(View.GONE);
-        bottomControls.setVisibility(View.GONE);
+    private LinearLayout topBar;
+    private boolean isTimerEnabled = true;
+
+    private final Handler hideHandler = new Handler(Looper.getMainLooper());
+    private final Runnable hideControlsRunnable = this::hideControls;
+
+    private final BroadcastReceiver mediaReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+
+            if (ReadingService.ACTION_PLAY.equals(action)) playBook();
+            else if (ReadingService.ACTION_PAUSE.equals(action)) pauseBook();
+            else if (ReadingService.ACTION_REWIND.equals(action)) rewindSentence();
+            else if (ReadingService.ACTION_CLOSE.equals(action)) {
+                stopTtsOnly();
+            }
+        }
     };
-    public void setBookLoaded(boolean loaded) {
-        isBookLoaded = loaded;
-    }
-    public boolean getBookLoaded() {
-        return isBookLoaded;
-    }
+
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
         settings = new SettingsManager(this);
         bookRepo = new BookRepository(this);
 
-        // Initialize views
-        topBar = findViewById(R.id.topBar);
         bottomControls = findViewById(R.id.bottomControls);
-        recyclerView = findViewById(R.id.recyclerView);
+        topBar = findViewById(R.id.topBar);
         timerToggleButton = findViewById(R.id.timerToggleButton);
+        recyclerView = findViewById(R.id.recyclerView);
 
-        // Start hidden
-        topBar.setVisibility(View.VISIBLE);
-        bottomControls.setVisibility(View.VISIBLE);
+        // Standard visibility logic - ensure controls are visible by default if stashed
+        showControls();
 
-        // RecyclerView setup
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.POST_NOTIFICATIONS}, 101);
+            }
+        }
+
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
 
         adapter = new SentenceAdapter(sentences, new SentenceAdapter.OnSentenceClickListener() {
@@ -104,33 +106,39 @@ public class MainActivity extends AppCompatActivity {
             public void onNavigateTo(int position) {
                 recyclerView.scrollToPosition(position);
             }
-        });
+
+            @Override
+            public void onSingleTap() {
+                // If you wish to use auto-hide again, call showControlsTemporarily() here
+            }
+        }, settings);
+
         recyclerView.setAdapter(adapter);
 
-        // Timer setup
         VolumeController vc = new VolumeController(this);
-        if (!vc.isAutoChanging()) {
-            vc.captureBaselineVolume();
-        }
-        volumeObserver = new ContentObserver(new Handler()) {
-            @Override
-            public void onChange(boolean selfChange) {
-                super.onChange(selfChange);
-                if (!vc.isAutoChanging()) {
-                    vc.captureBaselineVolume();
-                }
-            }
-        };
+        vc.captureBaselineVolume();
+        
         getContentResolver().registerContentObserver(
                 Settings.System.CONTENT_URI,
                 true,
-                volumeObserver
+                new ContentObserver(new Handler(Looper.getMainLooper())) {
+                    @Override
+                    public void onChange(boolean selfChange) {
+                        super.onChange(selfChange);
+                        if (!vc.isAutoChanging()) {
+                            vc.captureBaselineVolume();
+                        }
+                    }
+                }
         );
 
-        timerManager = new LodiStepTimer(vc, this::pauseBook);
+        timerManager = new LodiStepTimer(vc, () -> {
+            stopTtsOnly();
+            stopService(new Intent(this, ReadingService.class));
+            finish();
+        });
         timerManager.setTimerListener(remainingMs -> runOnUiThread(() -> updateTimerButtonText(remainingMs)));
 
-        // TTS setup
         ttsPlayer = new TTSPlayer(this, new TTSPlayer.OnTTSListener() {
             @Override
             public void onSentenceChanged(int index) {
@@ -144,48 +152,42 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // Shake detector
         shakeDetector = new ShakeDetector(this,
                 settings.getShakeIntensity(),
                 () -> {
-                    if (isTimerEnabled) {
-                        // Capture baseline volume before fading begins
-                        timerManager.setResetTimeMs(settings.getTimerMs());
-                        timerManager.start(settings.getTimerMs());
+                    if (isTimerEnabled && ttsPlayer.isPlaying()) {
                         timerManager.handleShake();
                     }
                 });
 
-
-        // Top bar buttons
         findViewById(R.id.loadBookBtn).setOnClickListener(v -> pickBook());
         findViewById(R.id.openShelfBtn).setOnClickListener(v ->
-                startActivity(new Intent(this, BookshelfActivity.class)));
+                startActivity(new Intent(this, BookshelfActivity.class))
+        );
         findViewById(R.id.openSettingsBtn).setOnClickListener(v ->
-                startActivity(new Intent(this, SettingsActivity.class)));
+                startActivity(new Intent(this, SettingsActivity.class))
+        );
 
-        // Timer toggle button logic
         timerToggleButton.setOnClickListener(v -> {
             isTimerEnabled = !isTimerEnabled;
             if (!isTimerEnabled) {
                 timerManager.stop();
-                timerToggleButton.setText("Off");
+                timerToggleButton.setText("⏳ Off");
                 timerToggleButton.setTextColor(0xFF333333);
             } else {
-                if (ttsPlayer != null && ttsPlayer.isPlaying()) {
+                if (ttsPlayer.isPlaying()) {
                     startTimerWithCurrentSettings();
                 } else {
-                    timerToggleButton.setText("On");
+                    timerToggleButton.setText("⏳ On");
                     timerToggleButton.setTextColor(0xFF2196F3);
                 }
             }
         });
 
-        // Bottom controls
-        playFab = findViewById(R.id.playFab);
-        pauseFab = findViewById(R.id.pauseFab);
-        rewindFab = findViewById(R.id.rewindFab);
-        closeFab = findViewById(R.id.closeFab);
+        FloatingActionButton playFab = findViewById(R.id.playFab);
+        FloatingActionButton pauseFab = findViewById(R.id.pauseFab);
+        FloatingActionButton rewindFab = findViewById(R.id.rewindFab);
+        FloatingActionButton closeFab = findViewById(R.id.closeFab);
 
         playFab.setOnClickListener(v -> playBook());
         pauseFab.setOnClickListener(v -> pauseBook());
@@ -196,74 +198,54 @@ public class MainActivity extends AppCompatActivity {
             finish();
         });
 
-        // Media session setup
-        mediaSession = new MediaSessionCompat(this, "LodiReaderSession");
-        PlaybackStateCompat state = new PlaybackStateCompat.Builder()
-                .setActions(PlaybackStateCompat.ACTION_PLAY |
-                        PlaybackStateCompat.ACTION_PAUSE |
-                        PlaybackStateCompat.ACTION_PLAY_PAUSE)
-                .setState(PlaybackStateCompat.STATE_PAUSED, 0, 1.0f)
-                .build();
-        mediaSession.setPlaybackState(state);
-        mediaSession.setCallback(new MediaSessionCompat.Callback() {
-            @Override
-            public void onPlay() {
-                if (!ttsPlayer.isPlaying()) {
-                    ttsPlayer.play();
-                }
-                toggleControlsHide(topBar);
-                toggleControlsHide(bottomControls);
-            }
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(ReadingService.ACTION_PLAY);
+        filter.addAction(ReadingService.ACTION_PAUSE);
+        filter.addAction(ReadingService.ACTION_REWIND);
+        filter.addAction(ReadingService.ACTION_CLOSE);
+        registerReceiver(mediaReceiver, filter);
 
-            @Override
-            public void onPause() {
-                if (ttsPlayer.isPlaying()) {
-                    ttsPlayer.pause();
-                }
-                toggleControlsShow(topBar);
-                toggleControlsShow(bottomControls);
-            }
-        });
-
-        mediaSession.setActive(true);
-
+        String uriFromShelf = getIntent().getStringExtra("BOOK_URI");
+        if (uriFromShelf != null) {
+            loadBookFromUri(Uri.parse(uriFromShelf));
+        }
+        
+        applyAppearance();
     }
 
-    /** Show/hide top and bottom controls with auto-hide */
-    public void toggleControlsHide(View view) {
-        view.animate()
-                .alpha(0f)
-                .setDuration(300)
-                .withEndAction(() -> view.setVisibility(View.GONE));
+    private void showControls() {
+        if (topBar != null) topBar.setVisibility(View.VISIBLE);
+        if (bottomControls != null) bottomControls.setVisibility(View.VISIBLE);
+        if (timerToggleButton != null) timerToggleButton.setVisibility(View.VISIBLE);
     }
 
-    public void toggleControlsShow(View view) {
-        view.setAlpha(0f); // start transparent
-        view.setVisibility(View.VISIBLE); // make sure it's visible
-        view.animate()
-                .alpha(1f) // fade in to fully visible
-                .setDuration(300);
+    private void hideControls() {
+        if (topBar != null) topBar.setVisibility(View.GONE);
+        if (bottomControls != null) bottomControls.setVisibility(View.GONE);
+        if (timerToggleButton != null) timerToggleButton.setVisibility(View.GONE);
     }
 
-
-
-    private void togglePlayPause() {
-        if (ttsPlayer.isPlaying()) {
-            ttsPlayer.pause();
-        } else {
-            ttsPlayer.play();
+    private void applyAppearance() {
+        if (recyclerView != null) {
+            recyclerView.setBackgroundColor(settings.getPaperColor());
+        }
+        View root = findViewById(R.id.rootLayout);
+        if (root != null) {
+            root.setBackgroundColor(settings.getPaperColor());
+        }
+        if (adapter != null) {
+            adapter.notifyDataSetChanged();
         }
     }
 
     private void updateTimerButtonText(long remainingMs) {
-        if (!isTimerEnabled) return;
+        if (!isTimerEnabled || timerToggleButton == null) return;
         
         int minutes = (int) (remainingMs / 1000) / 60;
         int seconds = (int) (remainingMs / 1000) % 60;
         String time = String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds);
-        timerToggleButton.setText(time);
+        timerToggleButton.setText("⏳ " + time);
         
-        // Change color to blue if active
         timerToggleButton.setTextColor(0xFF2196F3);
     }
 
@@ -321,7 +303,6 @@ public class MainActivity extends AppCompatActivity {
                     ttsPlayer.setCurrentIndex(startIndex);
                     adapter.setHighlighted(startIndex);
                     recyclerView.scrollToPosition(startIndex);
-                    isBookLoaded = true;
                 });
 
             } catch (Exception e) {
@@ -354,8 +335,8 @@ public class MainActivity extends AppCompatActivity {
         ttsPlayer.pause();
         timerManager.stop();
         updateService(false);
-        if (isTimerEnabled) {
-             timerToggleButton.setText("On");
+        if (isTimerEnabled && timerToggleButton != null) {
+             timerToggleButton.setText("⏳ On");
              timerToggleButton.setTextColor(0xFF333333);
         }
     }
@@ -370,8 +351,8 @@ public class MainActivity extends AppCompatActivity {
         ttsPlayer.stop();
         timerManager.stop();
         updateService(false);
-        if (isTimerEnabled) {
-            timerToggleButton.setText("On");
+        if (isTimerEnabled && timerToggleButton != null) {
+            timerToggleButton.setText("⏳ On");
             timerToggleButton.setTextColor(0xFF333333);
         }
     }
@@ -387,19 +368,13 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         shakeDetector.setShakeThreshold(settings.getShakeIntensity());
         shakeDetector.start();
-        // Apply paper color to the whole RecyclerView
-        findViewById(R.id.rootLayout).setBackgroundColor(settings.getPaperColor());
-        recyclerView.setBackgroundColor(settings.getPaperColor());
-
-        // Refresh adapter so font size/color apply
-        adapter.notifyDataSetChanged();
+        applyAppearance();
     }
-
 
     @Override
     protected void onPause() {
         super.onPause();
-        //shakeDetector.stop();
+        shakeDetector.stop();
 
         if (currentBookUri != null && ttsPlayer != null) {
             BookItem existing = bookRepo.findBook(currentBookUri);
@@ -423,10 +398,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        //unregisterReceiver(mediaReceiver);
-        if (volumeObserver != null) {
-            getContentResolver().unregisterContentObserver(volumeObserver);
-        }
+        unregisterReceiver(mediaReceiver);
         ttsPlayer.release();
     }
 

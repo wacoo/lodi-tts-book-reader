@@ -12,7 +12,8 @@ public class SettingsManager {
     private static final String KEY_SHAKE = "shake_intensity";
     private static final String KEY_FONT_SIZE = "font_size";
     private static final String KEY_PAPER_COLOR = "paper_color";
-    private static final String KEY_FONT_COLOR = "font_color"; // NEW
+    private static final String KEY_FONT_COLOR = "font_color";
+    private static final String KEY_FONT_FAMILY = "font_family";
 
     private SharedPreferences prefs;
 
@@ -66,5 +67,13 @@ public class SettingsManager {
     }
     public void setFontColor(int value) {
         prefs.edit().putInt(KEY_FONT_COLOR, value).apply();
+    }
+
+    // ===== FONT FAMILY =====
+    public String getFontFamily() {
+        return prefs.getString(KEY_FONT_FAMILY, "sans-serif");
+    }
+    public void setFontFamily(String value) {
+        prefs.edit().putString(KEY_FONT_FAMILY, value).apply();
     }
 }

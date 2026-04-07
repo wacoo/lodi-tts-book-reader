@@ -5,6 +5,8 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.text.Html;
+import android.text.Spanned;
+import android.text.style.URLSpan;
 import android.util.Log;
 
 import java.io.BufferedReader;
@@ -16,9 +18,10 @@ import java.text.BreakIterator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import nl.siegmann.epublib.domain.Book;
-import nl.siegmann.epublib.domain.Metadata;
 import nl.siegmann.epublib.domain.Resource;
 import nl.siegmann.epublib.domain.SpineReference;
 import nl.siegmann.epublib.epub.EpubReader;
@@ -28,7 +31,7 @@ public class BookLoader {
     public static class BookMetadata {
         public final String title;
         public final String author;
-        public final String coverUri;   // file:// URI to cached cover
+        public final String coverUri;
         public final List<Sentence> sentences;
 
         public BookMetadata(String title, String author, String coverUri, List<Sentence> sentences) {
@@ -39,172 +42,150 @@ public class BookLoader {
         }
     }
 
-    // ==================== PUBLIC METHOD ====================
     public BookMetadata loadBookWithMetadata(Context context, Uri uri) {
         String mimeType = context.getContentResolver().getType(uri);
 
         try (InputStream is = context.getContentResolver().openInputStream(uri)) {
-            if (is == null) {
-                return new BookMetadata("Error Opening File", "", null, new ArrayList<>());
-            }
+            if (is == null) return new BookMetadata("Error Opening", "", null, null);
 
-            if ("text/plain".equals(mimeType) ||
-                    (uri.getPath() != null && uri.getPath().toLowerCase().endsWith(".txt"))) {
-
-                List<Sentence> sentences = loadTxt(is);        // ← This line was causing error
-                return new BookMetadata("TXT Book", "", null, sentences);
-
+            if ("text/plain".equals(mimeType) || (uri.getPath() != null && uri.getPath().toLowerCase().endsWith(".txt"))) {
+                return new BookMetadata("TXT Book", "", null, loadTxt(is));
             } else {
                 return loadEpubWithMetadata(context, is);
             }
         } catch (Exception e) {
-            Log.e("BookLoader", "General load error", e);
-            return new BookMetadata("Error Loading Book", "", null, new ArrayList<>());
+            Log.e("BookLoader", "Load error", e);
+            return new BookMetadata("Error", "", null, null);
         }
     }
 
-// ==================== PRIVATE METHODS ====================
-
-    // This method was probably missing or had wrong signature
-    private List<Sentence> loadTxt(InputStream inputStream) {
+    private List<Sentence> loadTxt(InputStream is) {
         List<Sentence> sentences = new ArrayList<>();
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(inputStream))) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(is))) {
             StringBuilder sb = new StringBuilder();
             String line;
-            while ((line = br.readLine()) != null) {
-                sb.append(line).append(" ");
-            }
-            sentences.addAll(splitIntoSentences(sb.toString()));
-        } catch (Exception e) {
-            Log.e("BookLoader", "TXT load error", e);
-        }
+            while ((line = br.readLine()) != null) sb.append(line).append(" ");
+            sentences.addAll(splitIntoSentences(sb.toString(), null));
+        } catch (Exception e) { Log.e("BookLoader", "TXT error", e); }
         return sentences;
     }
 
-    // Your improved EPUB loader (with better cover detection)
-    private BookMetadata loadEpubWithMetadata(Context context, InputStream inputStream) {
-        List<Sentence> sentences = new ArrayList<>();
+    private BookMetadata loadEpubWithMetadata(Context context, InputStream is) {
+        List<Sentence> allSentences = new ArrayList<>();
         String title = "Unknown Book";
         String author = "";
         String coverUri = null;
 
         try {
-            EpubReader reader = new EpubReader();
-            Book book = reader.readEpub(inputStream);
+            Book book = new EpubReader().readEpub(is);
+            if (!book.getMetadata().getTitles().isEmpty()) title = book.getMetadata().getTitles().get(0);
+            if (!book.getMetadata().getAuthors().isEmpty()) author = book.getMetadata().getAuthors().get(0).toString();
 
-            // Title
-            if (!book.getMetadata().getTitles().isEmpty()) {
-                title = book.getMetadata().getTitles().get(0);
-            }
-
-            // Author
-            if (!book.getMetadata().getAuthors().isEmpty()) {
-                author = book.getMetadata().getAuthors().get(0).toString();
-            }
-
-            // Cover detection
-            Resource coverResource = book.getCoverImage();
-
-            if (coverResource == null) {
+            // Cover
+            Resource coverRes = book.getCoverImage();
+            if (coverRes == null) {
                 for (Resource res : book.getResources().getAll()) {
-                    if (res.getHref() == null) continue;
                     String href = res.getHref().toLowerCase();
-
-                    if (href.contains("cover") || href.contains("front")) {
-                        if (href.endsWith(".jpg") || href.endsWith(".png") || href.endsWith(".jpeg")) {
-                            if (res.getSize() > 5000) {   // avoid tiny images
-                                coverResource = res;
-                                break;
-                            }
-                        }
+                    if (href.contains("cover") && (href.endsWith(".jpg") || href.endsWith(".png"))) {
+                        coverRes = res;
+                        break;
                     }
                 }
             }
-
-            // Save cover
-            if (coverResource != null) {
-                try (InputStream coverIs = coverResource.getInputStream()) {
-                    Bitmap bitmap = BitmapFactory.decodeStream(coverIs);
-                    if (bitmap != null) {
-                        coverUri = saveCoverToCache(context, bitmap, title);
-                    }
-                } catch (Exception ignored) {}
+            if (coverRes != null) {
+                Bitmap bmp = BitmapFactory.decodeStream(coverRes.getInputStream());
+                if (bmp != null) coverUri = saveCoverToCache(context, bmp, title);
             }
 
-            // Extract text
-            StringBuilder fullText = new StringBuilder();
             for (SpineReference spine : book.getSpine().getSpineReferences()) {
-                try (BufferedReader br = new BufferedReader(
-                        new InputStreamReader(spine.getResource().getInputStream()))) {
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        fullText.append(line).append(" ");
-                    }
-                }
+                Resource resource = spine.getResource();
+                String resourceHref = resource.getHref();
+                String html = readResource(resource);
+                allSentences.addAll(processHtmlIntoSentences(html, resourceHref, allSentences.size()));
             }
 
-            String html = fullText.toString()
-                    .replaceAll("(?s)<style.*?>.*?</style>", "")
-                    .replaceAll("(?s)<script.*?>.*?</script>", "");
+        } catch (Exception e) { Log.e("BookLoader", "EPUB error", e); }
 
-            CharSequence spanned = Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY);
-            sentences.addAll(splitIntoSentences(spanned.toString()));
-
-        } catch (Exception e) {
-            Log.e("BookLoader", "EPUB error", e);
-        }
-
-        return new BookMetadata(title, author, coverUri, sentences);
+        return new BookMetadata(title, author, coverUri, allSentences);
     }
 
-    private List<Sentence> splitIntoSentences(String text) {
-        List<Sentence> sentences = new ArrayList<>();
-        if (text == null || text.trim().isEmpty()) return sentences;
+    private String readResource(Resource res) {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(res.getInputStream(), "UTF-8"))) {
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = br.readLine()) != null) sb.append(line).append("\n");
+            return sb.toString();
+        } catch (Exception e) { return ""; }
+    }
 
+    private List<Sentence> processHtmlIntoSentences(String html, String resourceHref, int startId) {
+        List<Sentence> result = new ArrayList<>();
+        
+        // Mark anchors so they survive tag stripping
+        String markedHtml = html.replaceAll("(?i)<[^>]+id=\"([^\"]+)\"[^>]*>", "$0 [IDMARKER:$1] ");
+        markedHtml = markedHtml.replaceAll("(?i)<[^>]+name=\"([^\"]+)\"[^>]*>", "$0 [IDMARKER:$1] ");
+
+        Spanned spanned = Html.fromHtml(markedHtml, Html.FROM_HTML_MODE_LEGACY);
+        String fullText = spanned.toString();
+        
+        BreakIterator iterator = BreakIterator.getSentenceInstance(Locale.US);
+        iterator.setText(fullText);
+
+        int idCounter = startId;
+        int start = iterator.first();
+        for (int end = iterator.next(); end != BreakIterator.DONE; start = end, end = iterator.next()) {
+            String sentenceText = fullText.substring(start, end).trim();
+            if (sentenceText.isEmpty()) continue;
+
+            String link = null;
+            String internalId = null;
+
+            if (sentenceText.contains("[IDMARKER:")) {
+                Pattern p = Pattern.compile("\\[IDMARKER:([^\\]\\s]+)\\]");
+                Matcher m = p.matcher(sentenceText);
+                if (m.find()) {
+                    internalId = m.group(1);
+                    sentenceText = sentenceText.replace(m.group(0), "").trim();
+                }
+            }
+            
+            if (result.isEmpty() && internalId == null) internalId = resourceHref;
+
+            URLSpan[] spans = spanned.getSpans(start, end, URLSpan.class);
+            if (spans != null && spans.length > 0) link = spans[0].getURL();
+
+            if (!sentenceText.isEmpty()) {
+                String fullInternalId = internalId;
+                if (internalId != null && !internalId.contains("/") && !internalId.equals(resourceHref)) {
+                    fullInternalId = resourceHref + "#" + internalId;
+                }
+                result.add(new Sentence(idCounter++, sentenceText, link, fullInternalId));
+            }
+        }
+        return result;
+    }
+
+    private List<Sentence> splitIntoSentences(String text, String internalId) {
+        List<Sentence> sentences = new ArrayList<>();
         BreakIterator iterator = BreakIterator.getSentenceInstance(Locale.US);
         iterator.setText(text);
-
         int id = 0;
-        for (int start = iterator.first(), end = iterator.next();
-             end != BreakIterator.DONE;
-             start = end, end = iterator.next()) {
-
-            String sentenceText = text.substring(start, end).trim();
-            if (!sentenceText.isEmpty()) {
-                sentences.add(new Sentence(id++, sentenceText, extractLink(sentenceText)));
-            }
+        for (int start = iterator.first(), end = iterator.next(); end != BreakIterator.DONE; start = end, end = iterator.next()) {
+            String s = text.substring(start, end).trim();
+            if (!s.isEmpty()) sentences.add(new Sentence(id++, s, null, internalId));
         }
         return sentences;
     }
 
-    private String extractLink(String text) {
-        if (text.contains("http")) {
-            try {
-                return text.substring(text.indexOf("http")).split("\\s+")[0];
-            } catch (Exception ignored) {}
-        }
-        return null;
-    }
-
-    // Save cover image to app's internal cache and return file URI
-    private String saveCoverToCache(Context context, Bitmap bitmap, String bookTitle) {
+    private String saveCoverToCache(Context context, Bitmap bmp, String title) {
         try {
-            File cacheDir = new File(context.getCacheDir(), "book_covers");
-            if (!cacheDir.exists()) {
-                cacheDir.mkdirs();
+            File dir = new File(context.getCacheDir(), "covers");
+            if (!dir.exists()) dir.mkdirs();
+            File file = new File(dir, Math.abs(title.hashCode()) + ".jpg");
+            try (FileOutputStream out = new FileOutputStream(file)) {
+                bmp.compress(Bitmap.CompressFormat.JPEG, 85, out);
             }
-
-            String safeName = bookTitle.replaceAll("[^a-zA-Z0-9]", "_") + "_" + System.currentTimeMillis() + ".jpg";
-            File coverFile = new File(cacheDir, safeName);
-
-            try (FileOutputStream out = new FileOutputStream(coverFile)) {
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out);
-            }
-
-            return Uri.fromFile(coverFile).toString();
-        } catch (Exception e) {
-            Log.e("BookLoader", "Failed to save cover", e);
-            return null;
-        }
+            return Uri.fromFile(file).toString();
+        } catch (Exception e) { return null; }
     }
 }

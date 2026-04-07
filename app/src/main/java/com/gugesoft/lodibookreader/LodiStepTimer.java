@@ -12,7 +12,7 @@ public class LodiStepTimer {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private TimerListener listener;
 
-    private long totalTimeMs, remainingTimeMs;
+    private long remainingTimeMs;
     private boolean isRunning = false;
     private long resetTimeMs = 60 * 1000; // Default 1 minute
     private final VolumeController volumeController;
@@ -61,7 +61,6 @@ public class LodiStepTimer {
     public void start(long durationMs) {
         stop();
 
-        this.totalTimeMs = durationMs;
         this.remainingTimeMs = durationMs;
         this.isRunning = true;
 
@@ -74,7 +73,7 @@ public class LodiStepTimer {
     public void handleShake() {
         if (!isRunning) return;
 
-        boolean wasInFade = remainingMsInFadePeriod();
+        boolean wasInFade = remainingTimeMs <= fadeDurationMs;
 
         // Reset timer to the configured reset time
         remainingTimeMs = resetTimeMs;
@@ -89,10 +88,6 @@ public class LodiStepTimer {
             volumeController.restoreVolume();
             volumeController.playBell();
         }
-    }
-
-    private boolean remainingMsInFadePeriod() {
-        return remainingTimeMs <= fadeDurationMs;
     }
 
     public void stop() {
