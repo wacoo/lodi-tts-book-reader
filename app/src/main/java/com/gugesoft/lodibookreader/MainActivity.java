@@ -11,6 +11,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.telephony.PhoneStateListener;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -51,6 +53,8 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout topBar;
     private boolean isTimerEnabled = true;
 
+    private boolean wasPlayingBeforeCall = false;
+
     private final Handler hideHandler = new Handler(Looper.getMainLooper());
     private final Runnable hideControlsRunnable = this::hideControls;
 
@@ -68,6 +72,27 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    private PhoneStateListener phoneStateListener = new PhoneStateListener() {
+        @Override
+        public void onCallStateChanged(int state, String phoneNumber) {
+            switch (state) {
+                case TelephonyManager.CALL_STATE_RINGING:
+                case TelephonyManager.CALL_STATE_OFFHOOK:
+                    if (ttsPlayer != null && ttsPlayer.isPlaying()) {
+                        wasPlayingBeforeCall = true;
+                        pauseBook();
+                    }
+                    break;
+                case TelephonyManager.CALL_STATE_IDLE:
+                    if (wasPlayingBeforeCall) {
+                        wasPlayingBeforeCall = false;
+                        playBook();
+                    }
+                    break;
+            }
+        }
+    };
+
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -81,7 +106,6 @@ public class MainActivity extends AppCompatActivity {
         timerToggleButton = findViewById(R.id.timerToggleButton);
         recyclerView = findViewById(R.id.recyclerView);
 
-        // Standard visibility logic - ensure controls are visible by default if stashed
         showControls();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -109,7 +133,11 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onSingleTap() {
-                // If you wish to use auto-hide again, call showControlsTemporarily() here
+                if (topBar.getVisibility() == View.VISIBLE) {
+                    hideControls();
+                } else {
+                    showControls();
+                }
             }
         }, settings);
 
@@ -172,13 +200,13 @@ public class MainActivity extends AppCompatActivity {
             isTimerEnabled = !isTimerEnabled;
             if (!isTimerEnabled) {
                 timerManager.stop();
-                timerToggleButton.setText("⏳ Off");
+                timerToggleButton.setText("Off");
                 timerToggleButton.setTextColor(0xFF333333);
             } else {
                 if (ttsPlayer.isPlaying()) {
                     startTimerWithCurrentSettings();
                 } else {
-                    timerToggleButton.setText("⏳ On");
+                    timerToggleButton.setText("On");
                     timerToggleButton.setTextColor(0xFF2196F3);
                 }
             }
@@ -204,6 +232,11 @@ public class MainActivity extends AppCompatActivity {
         filter.addAction(ReadingService.ACTION_REWIND);
         filter.addAction(ReadingService.ACTION_CLOSE);
         registerReceiver(mediaReceiver, filter);
+
+        TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+        if (tm != null) {
+            tm.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE);
+        }
 
         String uriFromShelf = getIntent().getStringExtra("BOOK_URI");
         if (uriFromShelf != null) {
@@ -244,7 +277,7 @@ public class MainActivity extends AppCompatActivity {
         int minutes = (int) (remainingMs / 1000) / 60;
         int seconds = (int) (remainingMs / 1000) % 60;
         String time = String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds);
-        timerToggleButton.setText("⏳ " + time);
+        timerToggleButton.setText(time);
         
         timerToggleButton.setTextColor(0xFF2196F3);
     }
@@ -336,7 +369,7 @@ public class MainActivity extends AppCompatActivity {
         timerManager.stop();
         updateService(false);
         if (isTimerEnabled && timerToggleButton != null) {
-             timerToggleButton.setText("⏳ On");
+             timerToggleButton.setText("On");
              timerToggleButton.setTextColor(0xFF333333);
         }
     }
@@ -352,7 +385,7 @@ public class MainActivity extends AppCompatActivity {
         timerManager.stop();
         updateService(false);
         if (isTimerEnabled && timerToggleButton != null) {
-            timerToggleButton.setText("⏳ On");
+            timerToggleButton.setText("On");
             timerToggleButton.setTextColor(0xFF333333);
         }
     }
@@ -399,6 +432,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         unregisterReceiver(mediaReceiver);
+        TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+        if (tm != null) {
+            tm.listen(phoneStateListener, PhoneStateListener.LISTEN_NONE);
+        }
         ttsPlayer.release();
     }
 

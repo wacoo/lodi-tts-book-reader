@@ -91,9 +91,6 @@ public class SentenceAdapter extends RecyclerView.Adapter<SentenceAdapter.ViewHo
 
             @Override
             public void onSingleClick(View v) {
-                // Notify for any tap to toggle controls
-                if (listener != null) listener.onSingleTap();
-
                 // Link handling logic
                 if (sentence.getLink() != null) {
                     String link = sentence.getLink();
@@ -101,15 +98,20 @@ public class SentenceAdapter extends RecyclerView.Adapter<SentenceAdapter.ViewHo
                         try {
                             Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(link));
                             v.getContext().startActivity(intent);
+                            return; // Don't trigger single tap if we handled a link
                         } catch (Exception ignored) {}
                     } else {
                         // Internal navigation (e.g. Chapter1.xhtml#id)
                         int target = findSentenceIndexByInternalId(link);
-                        if (target != -1 && listener != null) {
-                            listener.onNavigateTo(target);
+                        if (target != -1) {
+                            if (listener != null) listener.onNavigateTo(target);
+                            return; // Don't trigger single tap if we handled a link
                         }
                     }
                 }
+                
+                // If not a link or link handling failed, trigger single tap for UI controls
+                if (listener != null) listener.onSingleTap();
             }
         });
     }
