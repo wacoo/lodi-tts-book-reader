@@ -51,12 +51,10 @@ public class MainActivity extends AppCompatActivity {
     private MaterialButton timerToggleButton;
     private CardView bottomControls;
     private LinearLayout topBar;
+    private FloatingActionButton playPauseFab;
     private boolean isTimerEnabled = true;
 
     private boolean wasPlayingBeforeCall = false;
-
-    private final Handler hideHandler = new Handler(Looper.getMainLooper());
-    private final Runnable hideControlsRunnable = this::hideControls;
 
     private final BroadcastReceiver mediaReceiver = new BroadcastReceiver() {
         @Override
@@ -66,6 +64,7 @@ public class MainActivity extends AppCompatActivity {
             if (ReadingService.ACTION_PLAY.equals(action)) playBook();
             else if (ReadingService.ACTION_PAUSE.equals(action)) pauseBook();
             else if (ReadingService.ACTION_REWIND.equals(action)) rewindSentence();
+            else if (ReadingService.ACTION_FORWARD.equals(action)) forwardSentence();
             else if (ReadingService.ACTION_CLOSE.equals(action)) {
                 stopTtsOnly();
             }
@@ -212,14 +211,17 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        FloatingActionButton playFab = findViewById(R.id.playFab);
-        FloatingActionButton pauseFab = findViewById(R.id.pauseFab);
+        playPauseFab = findViewById(R.id.playPauseFab);
         FloatingActionButton rewindFab = findViewById(R.id.rewindFab);
+        FloatingActionButton forwardFab = findViewById(R.id.forwardFab);
         FloatingActionButton closeFab = findViewById(R.id.closeFab);
 
-        playFab.setOnClickListener(v -> playBook());
-        pauseFab.setOnClickListener(v -> pauseBook());
+        playPauseFab.setOnClickListener(v -> {
+            if (ttsPlayer.isPlaying()) pauseBook();
+            else playBook();
+        });
         rewindFab.setOnClickListener(v -> rewindSentence());
+        forwardFab.setOnClickListener(v -> forwardSentence());
         closeFab.setOnClickListener(v -> {
             stopTtsOnly();
             stopService(new Intent(this, ReadingService.class));
@@ -230,6 +232,7 @@ public class MainActivity extends AppCompatActivity {
         filter.addAction(ReadingService.ACTION_PLAY);
         filter.addAction(ReadingService.ACTION_PAUSE);
         filter.addAction(ReadingService.ACTION_REWIND);
+        filter.addAction(ReadingService.ACTION_FORWARD);
         filter.addAction(ReadingService.ACTION_CLOSE);
         registerReceiver(mediaReceiver, filter);
 
@@ -362,12 +365,18 @@ public class MainActivity extends AppCompatActivity {
         ttsPlayer.play();
         startTimerWithCurrentSettings();
         updateService(true);
+        if (playPauseFab != null) {
+            playPauseFab.setImageResource(android.R.drawable.ic_media_pause);
+        }
     }
 
     private void pauseBook() {
         ttsPlayer.pause();
         timerManager.stop();
         updateService(false);
+        if (playPauseFab != null) {
+            playPauseFab.setImageResource(android.R.drawable.ic_media_play);
+        }
         if (isTimerEnabled && timerToggleButton != null) {
              timerToggleButton.setText("On");
              timerToggleButton.setTextColor(0xFF333333);
@@ -377,13 +386,22 @@ public class MainActivity extends AppCompatActivity {
     private void rewindSentence() {
         int target = Math.max(0, ttsPlayer.getCurrentIndex() - 1);
         ttsPlayer.playFrom(target);
-        updateService(true);
+        updateService(ttsPlayer.isPlaying());
+    }
+
+    private void forwardSentence() {
+        int target = Math.min(sentences.size() - 1, ttsPlayer.getCurrentIndex() + 1);
+        ttsPlayer.playFrom(target);
+        updateService(ttsPlayer.isPlaying());
     }
 
     private void stopTtsOnly() {
         ttsPlayer.stop();
         timerManager.stop();
         updateService(false);
+        if (playPauseFab != null) {
+            playPauseFab.setImageResource(android.R.drawable.ic_media_play);
+        }
         if (isTimerEnabled && timerToggleButton != null) {
             timerToggleButton.setText("On");
             timerToggleButton.setTextColor(0xFF333333);
@@ -407,7 +425,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
-        shakeDetector.stop();
+        //shakeDetector.stop();
 
         if (currentBookUri != null && ttsPlayer != null) {
             BookItem existing = bookRepo.findBook(currentBookUri);

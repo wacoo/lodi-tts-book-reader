@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:background="#E3F2FD"
+    style="@style/AppContainer"
     android:orientation="vertical"
     android:padding="16dp"
     android:layout_width="match_parent"
@@ -9,10 +9,7 @@
 
     <TextView
         android:text="📚 My Books"
-        android:textSize="22sp"
-        android:textStyle="bold"
-        android:textColor="#0D47A1"
-        android:layout_marginBottom="12dp"
+        style="@style/PageTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"/>
 

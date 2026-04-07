@@ -6,7 +6,8 @@
     android:layout_height="wrap_content"
     android:layout_margin="8dp"
     app:cardCornerRadius="12dp"
-    app:cardElevation="6dp">
+    app:cardElevation="6dp"
+    app:cardBackgroundColor="@color/white">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -14,7 +15,7 @@
         android:orientation="horizontal"
         android:padding="12dp">
 
-        <!-- Cover / Initials Container -->
+        <!-- Cover / Initials -->
         <FrameLayout
             android:layout_width="90dp"
             android:layout_height="120dp">
@@ -31,15 +32,15 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:gravity="center"
-                android:textSize="40sp"
+                android:textSize="36sp"
                 android:textStyle="bold"
-                android:textColor="#FFFFFF"
-                android:background="#3F51B5"
+                android:textColor="@color/white"
+                android:background="@color/rewindButtonColor"
                 android:visibility="gone" />
 
         </FrameLayout>
 
-        <!-- Book Details -->
+        <!-- Book Info -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -53,6 +54,7 @@
                 android:layout_height="wrap_content"
                 android:textSize="18sp"
                 android:textStyle="bold"
+                android:textColor="@color/primaryText"
                 android:maxLines="2"
                 android:ellipsize="end" />
 
@@ -61,16 +63,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textSize="14sp"
-                android:textColor="#666666"
+                android:textColor="@color/secondaryText"
                 android:layout_marginTop="4dp" />
 
             <TextView
                 android:id="@+id/tvProgress"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="14sp"
-                android:textColor="#2196F3"
-                android:layout_marginTop="12dp" />
+                android:textSize="13sp"
+                android:textColor="@color/rewindButtonColor"
+                android:layout_marginTop="10dp" />
 
         </LinearLayout>
 
