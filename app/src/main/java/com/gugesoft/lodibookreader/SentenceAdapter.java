@@ -91,26 +91,27 @@ public class SentenceAdapter extends RecyclerView.Adapter<SentenceAdapter.ViewHo
 
             @Override
             public void onSingleClick(View v) {
-                // Link handling logic
                 if (sentence.getLink() != null) {
                     String link = sentence.getLink();
                     if (link.startsWith("http")) {
                         try {
                             Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(link));
                             v.getContext().startActivity(intent);
-                            return; // Don't trigger single tap if we handled a link
+                            return;
                         } catch (Exception ignored) {}
                     } else {
-                        // Internal navigation (e.g. Chapter1.xhtml#id)
                         int target = findSentenceIndexByInternalId(link);
                         if (target != -1) {
-                            if (listener != null) listener.onNavigateTo(target);
-                            return; // Don't trigger single tap if we handled a link
+                            if (listener != null) {
+                                listener.onNavigateTo(target);
+                            }
+                            highlightedIndex = target;
+                            notifyDataSetChanged();
+                            return;
                         }
                     }
                 }
-                
-                // If not a link or link handling failed, trigger single tap for UI controls
+
                 if (listener != null) listener.onSingleTap();
             }
         });
@@ -118,19 +119,17 @@ public class SentenceAdapter extends RecyclerView.Adapter<SentenceAdapter.ViewHo
 
     private int findSentenceIndexByInternalId(String linkHref) {
         if (linkHref == null) return -1;
-        
-        // Match full link first
+
+        // If link contains "#", extract only the anchor part
+        String anchorOnly = linkHref.contains("#")
+                ? linkHref.substring(linkHref.indexOf("#") + 1)
+                : linkHref;
+
         for (int i = 0; i < sentences.size(); i++) {
             String sId = sentences.get(i).getInternalId();
-            if (sId != null && sId.equals(linkHref)) return i;
-        }
-        
-        // Fuzzy match: if link is "resource.xhtml#anchor", match any sentence with that anchor
-        if (linkHref.contains("#")) {
-            String anchorOnly = linkHref.substring(linkHref.indexOf("#") + 1);
-            for (int i = 0; i < sentences.size(); i++) {
-                String sId = sentences.get(i).getInternalId();
-                if (sId != null && (sId.equals(anchorOnly) || sId.endsWith("#" + anchorOnly))) {
+            if (sId != null) {
+                // Match exact anchor or id ending with anchor
+                if (sId.equals(anchorOnly) || sId.endsWith(anchorOnly)) {
                     return i;
                 }
             }
@@ -138,6 +137,8 @@ public class SentenceAdapter extends RecyclerView.Adapter<SentenceAdapter.ViewHo
 
         return -1;
     }
+
+
 
     @Override
     public int getItemCount() {

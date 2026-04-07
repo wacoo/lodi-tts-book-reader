@@ -223,6 +223,9 @@ public class MainActivity extends AppCompatActivity {
         rewindFab.setOnClickListener(v -> rewindSentence());
         forwardFab.setOnClickListener(v -> forwardSentence());
         closeFab.setOnClickListener(v -> {
+            /*if (currentBookUri != null && ttsPlayer != null) {
+                settings.setLastReadSentenceIndex(currentBookUri, ttsPlayer.getCurrentIndex());
+            }*/
             stopTtsOnly();
             stopService(new Intent(this, ReadingService.class));
             finish();
@@ -327,6 +330,7 @@ public class MainActivity extends AppCompatActivity {
         cleanupPreviousBook();
         Toast.makeText(this, "Loading book...", Toast.LENGTH_SHORT).show();
         settings.setLastOpenedBookUri(uri.toString());
+
         new Thread(() -> {
             try {
                 currentBookUri = uri.toString();
@@ -338,11 +342,13 @@ public class MainActivity extends AppCompatActivity {
                         return;
                     }
 
+                    // Load sentences into adapter and TTS
                     sentences.clear();
                     sentences.addAll(meta.sentences);
                     adapter.notifyDataSetChanged();
                     ttsPlayer.loadSentences(sentences);
 
+                    // Update or insert book record in repo
                     BookItem existing = bookRepo.findBook(currentBookUri);
                     if (existing == null) {
                         existing = new BookItem(currentBookUri, meta.title, meta.author, meta.coverUri, 0);
@@ -354,7 +360,13 @@ public class MainActivity extends AppCompatActivity {
                         bookRepo.saveOrUpdateBook(existing);
                     }
 
-                    int startIndex = existing.lastSentenceIndex;
+                    // 🔑 Restore last read position
+                    int startIndex = settings.getLastReadSentenceIndex(currentBookUri);
+                    if (startIndex == 0 && existing != null) {
+                        // Fallback to repo if SettingsManager has no saved index
+                        startIndex = existing.lastSentenceIndex;
+                    }
+
                     ttsPlayer.setCurrentIndex(startIndex);
                     adapter.setHighlighted(startIndex);
                     recyclerView.scrollToPosition(startIndex);
@@ -415,6 +427,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void stopTtsOnly() {
+        if (currentBookUri != null && ttsPlayer != null) {
+            settings.setLastReadSentenceIndex(currentBookUri, ttsPlayer.getCurrentIndex());
+        }
         ttsPlayer.stop();
         timerManager.stop();
         updateService(false);

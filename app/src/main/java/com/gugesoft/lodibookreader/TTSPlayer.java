@@ -103,7 +103,7 @@ public class TTSPlayer {
 
     public void stop() {
         pause();
-        currentIndex = 0;
+        //currentIndex = 0;
     }
 
     public void release() {
