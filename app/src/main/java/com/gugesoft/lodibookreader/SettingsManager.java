@@ -14,13 +14,29 @@ public class SettingsManager {
     private static final String KEY_PAPER_COLOR = "paper_color";
     private static final String KEY_FONT_COLOR = "font_color";
     private static final String KEY_FONT_FAMILY = "font_family";
-
+    private static final String KEY_LAST_BOOK = "last_book_uri";
+    private static final String KEY_LAST_SENTENCE_PREFIX = "last_sentence_";
     private SharedPreferences prefs;
 
     public SettingsManager(Context context) {
         prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
     }
+    public void setLastOpenedBookUri(String uri) {
+        prefs.edit().putString(KEY_LAST_BOOK, uri).apply();
+    }
 
+    public String getLastOpenedBookUri() {
+        return prefs.getString(KEY_LAST_BOOK, null);
+    }
+    // Save last read sentence index for a specific book
+    public void setLastReadSentenceIndex(String bookUri, int index) {
+        prefs.edit().putInt(KEY_LAST_SENTENCE_PREFIX + bookUri, index).apply();
+    }
+
+    // Retrieve last read sentence index for a specific book
+    public int getLastReadSentenceIndex(String bookUri) {
+        return prefs.getInt(KEY_LAST_SENTENCE_PREFIX + bookUri, 0); // default 0
+    }
     // ===== TIMER =====
     public long getTimerMs() {
         return prefs.getLong(KEY_TIMER, 60 * 1000);

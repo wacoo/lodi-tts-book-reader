@@ -241,11 +241,30 @@ public class MainActivity extends AppCompatActivity {
             tm.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE);
         }
 
-        String uriFromShelf = getIntent().getStringExtra("BOOK_URI");
+        /*String uriFromShelf = getIntent().getStringExtra("BOOK_URI");
         if (uriFromShelf != null) {
             loadBookFromUri(Uri.parse(uriFromShelf));
+        }*/
+        String uriFromShelf = getIntent().getStringExtra("BOOK_URI");
+
+        String bookUriToLoad = (uriFromShelf != null) ? uriFromShelf : settings.getLastOpenedBookUri();
+
+        if (bookUriToLoad != null) {
+            Uri bookUri = Uri.parse(bookUriToLoad);
+
+            // Load book normally
+            loadBookFromUri(bookUri);
+
+            // After loading, restore last read position
+            int lastIndex = settings.getLastReadSentenceIndex(bookUriToLoad); // <-- replace with your method
+            if (lastIndex > 0) {
+                // Scroll or highlight in your RecyclerView / TextView
+                recyclerView.scrollToPosition(lastIndex); // or whatever your list is
+                // If you have TTS, set its index
+                ttsPlayer.setCurrentIndex(lastIndex); // only if you use TTS
+            }
         }
-        
+
         applyAppearance();
     }
 
@@ -307,7 +326,7 @@ public class MainActivity extends AppCompatActivity {
     private void loadBookFromUri(Uri uri) {
         cleanupPreviousBook();
         Toast.makeText(this, "Loading book...", Toast.LENGTH_SHORT).show();
-
+        settings.setLastOpenedBookUri(uri.toString());
         new Thread(() -> {
             try {
                 currentBookUri = uri.toString();
@@ -426,7 +445,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         //shakeDetector.stop();
-
+        if (currentBookUri != null && ttsPlayer != null) {
+            settings.setLastReadSentenceIndex(currentBookUri.toString(), ttsPlayer.getCurrentIndex());
+        }
         if (currentBookUri != null && ttsPlayer != null) {
             BookItem existing = bookRepo.findBook(currentBookUri);
             if (existing != null) {
@@ -449,6 +470,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (currentBookUri != null && ttsPlayer != null) {
+            // Save last read sentence
+            settings.setLastReadSentenceIndex(currentBookUri, ttsPlayer.getCurrentIndex());
+        }
         unregisterReceiver(mediaReceiver);
         TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
         if (tm != null) {
