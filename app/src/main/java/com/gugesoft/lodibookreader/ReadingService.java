@@ -13,6 +13,7 @@ import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
+import android.util.Log;
 import android.view.KeyEvent;
 
 public class ReadingService extends Service {
@@ -64,6 +65,7 @@ public class ReadingService extends Service {
             @Override
             public boolean onMediaButtonEvent(Intent mediaButtonEvent) {
                 KeyEvent keyEvent = mediaButtonEvent.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
+                Log.d("ReadingService", "Media button event: " + keyEvent);
                 if (keyEvent != null && keyEvent.getAction() == KeyEvent.ACTION_DOWN) {
                     if (keyEvent.getKeyCode() == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || 
                         keyEvent.getKeyCode() == KeyEvent.KEYCODE_HEADSETHOOK) {
@@ -75,6 +77,10 @@ public class ReadingService extends Service {
                 return super.onMediaButtonEvent(mediaButtonEvent);
             }
         });
+        PendingIntent mediaButtonIntent = PendingIntent.getBroadcast(
+                this, 0, new Intent(Intent.ACTION_MEDIA_BUTTON), PendingIntent.FLAG_IMMUTABLE
+        );
+        mediaSession.setMediaButtonReceiver(mediaButtonIntent);
 
         mediaSession.setActive(true);
         startForeground(NOTIF_ID, buildNotification());
@@ -104,9 +110,9 @@ public class ReadingService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null) {
             String action = intent.getAction();
-            boolean wasPlaying = isPlaying;
 
             if (ACTION_CLOSE.equals(action)) {
+                sendBroadcastToActivity(ACTION_CLOSE);
                 stopForeground(true);
                 stopSelf();
                 return START_NOT_STICKY;

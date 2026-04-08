@@ -14,11 +14,12 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"
         android:required="false" />
 
-    <!-- Needed for phone state listener (you already use TelephonyManager) -->
+    <!-- Needed for phone state listener -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
     <!-- Optional but recommended for headset hook events -->
-    <!--<uses-permission android:name="android.permission.MEDIA_CONTENT_CONTROL" -->
+    <uses-permission android:name="android.permission.MEDIA_CONTENT_CONTROL"
+        tools:ignore="ProtectedPermissions" />
 
 
     <application
@@ -52,7 +53,12 @@
             android:name=".ReadingService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </service>
+
     </application>
 
 </manifest>

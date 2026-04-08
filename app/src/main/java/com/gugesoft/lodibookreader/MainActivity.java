@@ -11,6 +11,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.telephony.PhoneStateListener;
@@ -59,7 +60,6 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout topBar;
     private FloatingActionButton playPauseFab;
     private boolean isTimerEnabled = true;
-    private MediaSessionCompat mediaSession;
     private boolean wasPlayingBeforeCall = false;
 
     private final AudioManager.OnAudioFocusChangeListener focusChangeListener = focusChange -> {
@@ -80,29 +80,40 @@ public class MainActivity extends AppCompatActivity {
                 break;
         }
     };
-    private final BroadcastReceiver mediaReceiver = new BroadcastReceiver() {
+
+    private final BroadcastReceiver serviceUpdateReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
-            if (Intent.ACTION_MEDIA_BUTTON.equals(action)) {
-                KeyEvent event = intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
+            if (action == null) return;
 
-                if (event != null && event.getAction() == KeyEvent.ACTION_DOWN) {
-                    if (event.getKeyCode() == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
-                        if (ttsPlayer.isPlaying()) pauseBook();
-                        else playBook();
-                    }
-                }
-            }
-            if (ReadingService.ACTION_PLAY.equals(action)) playBook();
-            else if (ReadingService.ACTION_PAUSE.equals(action)) pauseBook();
-            else if (ReadingService.ACTION_REWIND.equals(action)) rewindSentence();
-            else if (ReadingService.ACTION_FORWARD.equals(action)) forwardSentence();
-            else if (ReadingService.ACTION_CLOSE.equals(action)) {
-                stopTtsOnly();
+            switch (action) {
+                case ReadingService.ACTION_PLAY:
+                    playBook();
+                    break;
+                case ReadingService.ACTION_PAUSE:
+                    pauseBook();
+                    break;
+                case ReadingService.ACTION_REWIND:
+                    rewindSentence();
+                    break;
+                case ReadingService.ACTION_FORWARD:
+                    forwardSentence();
+                    break;
+                case ReadingService.ACTION_CLOSE:
+                    stopTtsOnly();
+                    finish();
+                    break;
             }
         }
     };
+
+
+    private void sendServiceCommand(String action) {
+        Intent intent = new Intent(this, ReadingService.class);
+        intent.setAction(action);
+        startService(intent);
+    }
 
     private final BroadcastReceiver headsetReceiver = new BroadcastReceiver() {
         @Override
@@ -121,13 +132,14 @@ public class MainActivity extends AppCompatActivity {
                 int state = intent.getIntExtra("state", -1);
                 if (state == 1) { // Plugged in
                     // Logic: Resume only if it was playing before or as per user preference
-                    if (!ttsPlayer.isPlaying()) {
+                    if (ttsPlayer != null && !ttsPlayer.isPlaying()) {
                         playBook();
                     }
                 }
             }
         }
     };
+
     private PhoneStateListener phoneStateListener = new PhoneStateListener() {
         @Override
         public void onCallStateChanged(int state, String phoneNumber) {
@@ -149,17 +161,6 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (event.getRepeatCount() == 0) { // Only trigger on the first press
-            if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || keyCode == KeyEvent.KEYCODE_HEADSETHOOK) {
-                if (ttsPlayer.isPlaying()) pauseBook();
-                else playBook();
-                return true;
-            }
-        }
-        return super.onKeyDown(keyCode, event);
-    }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     @Override
@@ -173,31 +174,39 @@ public class MainActivity extends AppCompatActivity {
         topBar = findViewById(R.id.topBar);
         timerToggleButton = findViewById(R.id.timerToggleButton);
         recyclerView = findViewById(R.id.recyclerView);
-        mediaSession = new MediaSessionCompat(this, "LodiReader");
 
-        mediaSession.setCallback(new MediaSessionCompat.Callback() {
-            @Override
-            public void onPlay() {
-                playBook();
+        // Register serviceUpdateReceiver with all relevant actions
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(ReadingService.ACTION_PLAY);
+        filter.addAction(ReadingService.ACTION_PAUSE);
+        filter.addAction(ReadingService.ACTION_REWIND);
+        filter.addAction(ReadingService.ACTION_FORWARD);
+        filter.addAction(ReadingService.ACTION_CLOSE);
+        registerReceiver(serviceUpdateReceiver, filter);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            String packageName = getPackageName();
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                intent.setData(Uri.parse("package:" + packageName));
+                startActivity(intent);
             }
-
-            @Override
-            public void onPause() {
-                pauseBook();
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) { // Android 12+
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.BLUETOOTH_CONNECT}, 102);
             }
+        }
 
-            @Override
-            public void onSkipToNext() {
-                forwardSentence();
-            }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.READ_PHONE_STATE}, 103);
+        }
 
-            @Override
-            public void onSkipToPrevious() {
-                rewindSentence();
-            }
-        });
-
-        mediaSession.setActive(true);
         showControls();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -311,20 +320,12 @@ public class MainActivity extends AppCompatActivity {
         FloatingActionButton forwardFab = findViewById(R.id.forwardFab);
         FloatingActionButton closeFab = findViewById(R.id.closeFab);
 
-        playPauseFab.setOnClickListener(v -> {
-            if (ttsPlayer.isPlaying()) pauseBook();
-            else playBook();
-        });
-        rewindFab.setOnClickListener(v -> rewindSentence());
-        forwardFab.setOnClickListener(v -> forwardSentence());
-        closeFab.setOnClickListener(v -> {
-            /*if (currentBookUri != null && ttsPlayer != null) {
-                settings.setLastReadSentenceIndex(currentBookUri, ttsPlayer.getCurrentIndex());
-            }*/
-            stopTtsOnly();
-            stopService(new Intent(this, ReadingService.class));
-            finish();
-        });
+        playPauseFab.setOnClickListener(v -> sendServiceCommand(
+                ttsPlayer.isPlaying() ? ReadingService.ACTION_PAUSE : ReadingService.ACTION_PLAY
+        ));
+        rewindFab.setOnClickListener(v -> sendServiceCommand(ReadingService.ACTION_REWIND));
+        forwardFab.setOnClickListener(v -> sendServiceCommand(ReadingService.ACTION_FORWARD));
+        closeFab.setOnClickListener(v -> sendServiceCommand(ReadingService.ACTION_CLOSE));
 
         MaterialButton tocBtn = findViewById(R.id.openTocBtn);
         tocBtn.setOnClickListener(v -> {
@@ -347,15 +348,6 @@ public class MainActivity extends AppCompatActivity {
                     .commit();
         });
 
-        IntentFilter appFilter = new IntentFilter();
-        appFilter.addAction(ReadingService.ACTION_PLAY);
-        appFilter.addAction(ReadingService.ACTION_PAUSE);
-        appFilter.addAction(ReadingService.ACTION_REWIND);
-        appFilter.addAction(ReadingService.ACTION_FORWARD);
-        appFilter.addAction(ReadingService.ACTION_CLOSE);
-        appFilter.addAction(Intent.ACTION_MEDIA_BUTTON);
-        registerReceiver(mediaReceiver, appFilter);
-
         // 2. Filter for Hardware/System events (Headsets)
         IntentFilter hardwareFilter = new IntentFilter();
         hardwareFilter.addAction(AudioManager.ACTION_AUDIO_BECOMING_NOISY);
@@ -367,27 +359,17 @@ public class MainActivity extends AppCompatActivity {
             tm.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE);
         }
 
-        /*String uriFromShelf = getIntent().getStringExtra("BOOK_URI");
-        if (uriFromShelf != null) {
-            loadBookFromUri(Uri.parse(uriFromShelf));
-        }*/
         String uriFromShelf = getIntent().getStringExtra("BOOK_URI");
-
         String bookUriToLoad = (uriFromShelf != null) ? uriFromShelf : settings.getLastOpenedBookUri();
 
         if (bookUriToLoad != null) {
             Uri bookUri = Uri.parse(bookUriToLoad);
-
-            // Load book normally
             loadBookFromUri(bookUri);
 
-            // After loading, restore last read position
-            int lastIndex = settings.getLastReadSentenceIndex(bookUriToLoad); // <-- replace with your method
+            int lastIndex = settings.getLastReadSentenceIndex(bookUriToLoad);
             if (lastIndex > 0) {
-                // Scroll or highlight in your RecyclerView / TextView
-                recyclerView.scrollToPosition(lastIndex); // or whatever your list is
-                // If you have TTS, set its index
-                ttsPlayer.setCurrentIndex(lastIndex); // only if you use TTS
+                recyclerView.scrollToPosition(lastIndex);
+                ttsPlayer.setCurrentIndex(lastIndex);
             }
         }
 
@@ -489,7 +471,6 @@ public class MainActivity extends AppCompatActivity {
                     // 🔑 Restore last read position
                     int startIndex = settings.getLastReadSentenceIndex(currentBookUri);
                     if (startIndex == 0 && existing != null) {
-                        // Fallback to repo if SettingsManager has no saved index
                         startIndex = existing.lastSentenceIndex;
                     }
 
@@ -519,15 +500,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void playBook() {
-        // 1. Get the Audio Manager
-        AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (ttsPlayer == null || ttsPlayer.isPlaying()) return;
 
-        // 2. Request Focus (ask permission to play)
+        AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         int result = am.requestAudioFocus(focusChangeListener,
                 AudioManager.STREAM_MUSIC,
                 AudioManager.AUDIOFOCUS_GAIN);
 
-        // 3. Only play if permission is granted
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             ttsPlayer.play();
             startTimerWithCurrentSettings();
@@ -538,29 +517,13 @@ public class MainActivity extends AppCompatActivity {
         } else {
             Toast.makeText(this, "Cannot play: another app is using audio", Toast.LENGTH_SHORT).show();
         }
-
-        if (mediaSession != null) {
-            mediaSession.setPlaybackState(
-                    new PlaybackStateCompat.Builder()
-                            .setActions(
-                                    PlaybackStateCompat.ACTION_PLAY_PAUSE |
-                                            PlaybackStateCompat.ACTION_PLAY |
-                                            PlaybackStateCompat.ACTION_PAUSE |
-                                            PlaybackStateCompat.ACTION_SKIP_TO_NEXT |
-                                            PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
-                            )
-                            .setState(PlaybackStateCompat.STATE_PLAYING,
-                                    ttsPlayer.getCurrentIndex(),
-                                    1.0f)
-                            .build()
-            );
-        }
     }
 
     private void pauseBook() {
+        if (ttsPlayer == null || !ttsPlayer.isPlaying()) return;
+
         ttsPlayer.pause();
 
-        // 4. Abandon Focus (tell the system we are done)
         AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         if (am != null) {
             am.abandonAudioFocus(focusChangeListener);
@@ -575,41 +538,38 @@ public class MainActivity extends AppCompatActivity {
             timerToggleButton.setText("On");
             timerToggleButton.setTextColor(0xFF333333);
         }
-
-        if (mediaSession != null) {
-            mediaSession.setPlaybackState(
-                    new PlaybackStateCompat.Builder()
-                            .setActions(
-                                    PlaybackStateCompat.ACTION_PLAY_PAUSE |
-                                            PlaybackStateCompat.ACTION_PLAY |
-                                            PlaybackStateCompat.ACTION_PAUSE
-                            )
-                            .setState(PlaybackStateCompat.STATE_PAUSED,
-                                    ttsPlayer.getCurrentIndex(),
-                                    0.0f)
-                            .build()
-            );
-        }
     }
 
 
     private void rewindSentence() {
+        if (ttsPlayer == null) return;
         int target = Math.max(0, ttsPlayer.getCurrentIndex() - 1);
         ttsPlayer.setCurrentIndex(target);
-        playBook(); // This ensures focus is grabbed
+        if (ttsPlayer.isPlaying()) {
+            ttsPlayer.play(); // Restart current sentence
+        } else {
+            adapter.setHighlighted(target);
+            recyclerView.scrollToPosition(target);
+        }
     }
 
     private void forwardSentence() {
+        if (ttsPlayer == null) return;
         int target = Math.min(sentences.size() - 1, ttsPlayer.getCurrentIndex() + 1);
         ttsPlayer.setCurrentIndex(target);
-        playBook(); // This ensures focus is grabbed
+        if (ttsPlayer.isPlaying()) {
+            ttsPlayer.play(); // Restart current sentence
+        } else {
+            adapter.setHighlighted(target);
+            recyclerView.scrollToPosition(target);
+        }
     }
 
     private void stopTtsOnly() {
         if (currentBookUri != null && ttsPlayer != null) {
             settings.setLastReadSentenceIndex(currentBookUri, ttsPlayer.getCurrentIndex());
         }
-        ttsPlayer.stop();
+        if (ttsPlayer != null) ttsPlayer.stop();
         timerManager.stop();
         updateService(false);
         if (playPauseFab != null) {
@@ -638,11 +598,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
-        //shakeDetector.stop();
         if (currentBookUri != null && ttsPlayer != null) {
-            settings.setLastReadSentenceIndex(currentBookUri.toString(), ttsPlayer.getCurrentIndex());
-        }
-        if (currentBookUri != null && ttsPlayer != null) {
+            settings.setLastReadSentenceIndex(currentBookUri, ttsPlayer.getCurrentIndex());
             BookItem existing = bookRepo.findBook(currentBookUri);
             if (existing != null) {
                 existing.lastSentenceIndex = ttsPlayer.getCurrentIndex();
@@ -656,9 +613,6 @@ public class MainActivity extends AppCompatActivity {
         super.onNewIntent(intent);
         setIntent(intent);
 
-        // 👇 ADD THIS LINE
-        MediaButtonReceiver.handleIntent(mediaSession, intent);
-
         String uriFromShelf = intent.getStringExtra("BOOK_URI");
         if (uriFromShelf != null) {
             loadBookFromUri(Uri.parse(uriFromShelf));
@@ -669,24 +623,19 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         if (currentBookUri != null && ttsPlayer != null) {
-            // Save last read sentence
             settings.setLastReadSentenceIndex(currentBookUri, ttsPlayer.getCurrentIndex());
         }
-        unregisterReceiver(mediaReceiver);
         try {
             unregisterReceiver(headsetReceiver);
+            unregisterReceiver(serviceUpdateReceiver);
         } catch (Exception e) {
-            Log.e("MainActivity", "Receiver not registered");
+            Log.e("MainActivity", "Receiver error", e);
         }
         TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
         if (tm != null) {
             tm.listen(phoneStateListener, PhoneStateListener.LISTEN_NONE);
         }
-        ttsPlayer.release();
-        if (mediaSession != null) {
-            mediaSession.release();
-            mediaSession = null;
-        }
+        if (ttsPlayer != null) ttsPlayer.release();
     }
 
     private void cleanupPreviousBook() {
