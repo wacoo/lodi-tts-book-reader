@@ -12,6 +12,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.support.v4.media.session.MediaSessionCompat;
 import android.telephony.PhoneStateListener;
 import android.telephony.TelephonyManager;
 import android.util.Log;
@@ -19,6 +20,8 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.Toast;
+import androidx.media.session.MediaButtonReceiver;
+import android.support.v4.media.session.PlaybackStateCompat;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -56,7 +59,7 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout topBar;
     private FloatingActionButton playPauseFab;
     private boolean isTimerEnabled = true;
-
+    private MediaSessionCompat mediaSession;
     private boolean wasPlayingBeforeCall = false;
 
     private final AudioManager.OnAudioFocusChangeListener focusChangeListener = focusChange -> {
@@ -81,7 +84,16 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
+            if (Intent.ACTION_MEDIA_BUTTON.equals(action)) {
+                KeyEvent event = intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
 
+                if (event != null && event.getAction() == KeyEvent.ACTION_DOWN) {
+                    if (event.getKeyCode() == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
+                        if (ttsPlayer.isPlaying()) pauseBook();
+                        else playBook();
+                    }
+                }
+            }
             if (ReadingService.ACTION_PLAY.equals(action)) playBook();
             else if (ReadingService.ACTION_PAUSE.equals(action)) pauseBook();
             else if (ReadingService.ACTION_REWIND.equals(action)) rewindSentence();
@@ -161,7 +173,31 @@ public class MainActivity extends AppCompatActivity {
         topBar = findViewById(R.id.topBar);
         timerToggleButton = findViewById(R.id.timerToggleButton);
         recyclerView = findViewById(R.id.recyclerView);
+        mediaSession = new MediaSessionCompat(this, "LodiReader");
 
+        mediaSession.setCallback(new MediaSessionCompat.Callback() {
+            @Override
+            public void onPlay() {
+                playBook();
+            }
+
+            @Override
+            public void onPause() {
+                pauseBook();
+            }
+
+            @Override
+            public void onSkipToNext() {
+                forwardSentence();
+            }
+
+            @Override
+            public void onSkipToPrevious() {
+                rewindSentence();
+            }
+        });
+
+        mediaSession.setActive(true);
         showControls();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -317,6 +353,7 @@ public class MainActivity extends AppCompatActivity {
         appFilter.addAction(ReadingService.ACTION_REWIND);
         appFilter.addAction(ReadingService.ACTION_FORWARD);
         appFilter.addAction(ReadingService.ACTION_CLOSE);
+        appFilter.addAction(Intent.ACTION_MEDIA_BUTTON);
         registerReceiver(mediaReceiver, appFilter);
 
         // 2. Filter for Hardware/System events (Headsets)
@@ -501,6 +538,23 @@ public class MainActivity extends AppCompatActivity {
         } else {
             Toast.makeText(this, "Cannot play: another app is using audio", Toast.LENGTH_SHORT).show();
         }
+
+        if (mediaSession != null) {
+            mediaSession.setPlaybackState(
+                    new PlaybackStateCompat.Builder()
+                            .setActions(
+                                    PlaybackStateCompat.ACTION_PLAY_PAUSE |
+                                            PlaybackStateCompat.ACTION_PLAY |
+                                            PlaybackStateCompat.ACTION_PAUSE |
+                                            PlaybackStateCompat.ACTION_SKIP_TO_NEXT |
+                                            PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
+                            )
+                            .setState(PlaybackStateCompat.STATE_PLAYING,
+                                    ttsPlayer.getCurrentIndex(),
+                                    1.0f)
+                            .build()
+            );
+        }
     }
 
     private void pauseBook() {
@@ -521,7 +575,23 @@ public class MainActivity extends AppCompatActivity {
             timerToggleButton.setText("On");
             timerToggleButton.setTextColor(0xFF333333);
         }
+
+        if (mediaSession != null) {
+            mediaSession.setPlaybackState(
+                    new PlaybackStateCompat.Builder()
+                            .setActions(
+                                    PlaybackStateCompat.ACTION_PLAY_PAUSE |
+                                            PlaybackStateCompat.ACTION_PLAY |
+                                            PlaybackStateCompat.ACTION_PAUSE
+                            )
+                            .setState(PlaybackStateCompat.STATE_PAUSED,
+                                    ttsPlayer.getCurrentIndex(),
+                                    0.0f)
+                            .build()
+            );
+        }
     }
+
 
     private void rewindSentence() {
         int target = Math.max(0, ttsPlayer.getCurrentIndex() - 1);
@@ -585,6 +655,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+
+        // 👇 ADD THIS LINE
+        MediaButtonReceiver.handleIntent(mediaSession, intent);
+
         String uriFromShelf = intent.getStringExtra("BOOK_URI");
         if (uriFromShelf != null) {
             loadBookFromUri(Uri.parse(uriFromShelf));
@@ -609,6 +683,10 @@ public class MainActivity extends AppCompatActivity {
             tm.listen(phoneStateListener, PhoneStateListener.LISTEN_NONE);
         }
         ttsPlayer.release();
+        if (mediaSession != null) {
+            mediaSession.release();
+            mediaSession = null;
+        }
     }
 
     private void cleanupPreviousBook() {

@@ -8,6 +8,19 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Needed for Bluetooth headset/media button events on Android 12+ -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"
+        android:required="false" />
+
+    <!-- Needed for phone state listener (you already use TelephonyManager) -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+
+    <!-- Optional but recommended for headset hook events -->
+    <!--<uses-permission android:name="android.permission.MEDIA_CONTENT_CONTROL" -->
+
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
