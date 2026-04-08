@@ -42,6 +42,19 @@
             android:textColor="@color/primaryText"
             android:textSize="25sp"
             app:iconTint="@color/primaryText" />
+        <!-- TOC Button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/openTocBtn"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="📑"
+            android:textAllCaps="false"
+            android:textColor="@color/primaryText"
+            android:textSize="25sp"
+            app:iconTint="@color/primaryText" />
+
 
         <!-- Library Button -->
         <com.google.android.material.button.MaterialButton
