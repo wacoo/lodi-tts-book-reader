@@ -42,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView recyclerView;
     private SentenceAdapter adapter;
     private final List<Sentence> sentences = new ArrayList<>();
+    private final List<BookLoader.TOCItem> currentToc = new ArrayList<>();
 
     private TTSPlayer ttsPlayer;
     private LodiStepTimer timerManager;
@@ -288,16 +289,20 @@ public class MainActivity extends AppCompatActivity {
             stopService(new Intent(this, ReadingService.class));
             finish();
         });
-        SentenceAdapter sentenceAdapter = null;
+
         MaterialButton tocBtn = findViewById(R.id.openTocBtn);
         tocBtn.setOnClickListener(v -> {
             getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.rootLayout, new TableOfContentsFragment(sentences, index -> {
+                    .replace(R.id.rootLayout, new TableOfContentsFragment(currentToc, sentences, index -> {
                         // Jump playback
-                        ttsPlayer.playFrom(index);
+                        ttsPlayer.setCurrentIndex(index);
+                        playBook();
 
                         // Highlight in SentenceAdapter
-                        sentenceAdapter.setHighlighted(index);
+                        if (adapter != null) {
+                            adapter.setHighlighted(index);
+                            recyclerView.scrollToPosition(index);
+                        }
 
                         // Close TOC and return to reader
                         getSupportFragmentManager().popBackStack();
@@ -426,6 +431,9 @@ public class MainActivity extends AppCompatActivity {
                     // Load sentences into adapter and TTS
                     sentences.clear();
                     sentences.addAll(meta.sentences);
+                    currentToc.clear();
+                    currentToc.addAll(meta.toc);
+
                     adapter.notifyDataSetChanged();
                     ttsPlayer.loadSentences(sentences);
 

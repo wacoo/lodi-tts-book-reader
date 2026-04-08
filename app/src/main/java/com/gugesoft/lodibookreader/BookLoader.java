@@ -24,21 +24,35 @@ import java.util.regex.Pattern;
 import nl.siegmann.epublib.domain.Book;
 import nl.siegmann.epublib.domain.Resource;
 import nl.siegmann.epublib.domain.SpineReference;
+import nl.siegmann.epublib.domain.TOCReference;
+import nl.siegmann.epublib.domain.TableOfContents;
 import nl.siegmann.epublib.epub.EpubReader;
 
 public class BookLoader {
+
+    public static class TOCItem {
+        public final String title;
+        public final String href;
+
+        public TOCItem(String title, String href) {
+            this.title = title;
+            this.href = href;
+        }
+    }
 
     public static class BookMetadata {
         public final String title;
         public final String author;
         public final String coverUri;
         public final List<Sentence> sentences;
+        public final List<TOCItem> toc;
 
-        public BookMetadata(String title, String author, String coverUri, List<Sentence> sentences) {
+        public BookMetadata(String title, String author, String coverUri, List<Sentence> sentences, List<TOCItem> toc) {
             this.title = title != null && !title.isEmpty() ? title : "Unknown Book";
             this.author = author != null ? author : "";
             this.coverUri = coverUri;
             this.sentences = sentences != null ? sentences : new ArrayList<>();
+            this.toc = toc != null ? toc : new ArrayList<>();
         }
     }
 
@@ -46,16 +60,16 @@ public class BookLoader {
         String mimeType = context.getContentResolver().getType(uri);
 
         try (InputStream is = context.getContentResolver().openInputStream(uri)) {
-            if (is == null) return new BookMetadata("Error Opening", "", null, null);
+            if (is == null) return new BookMetadata("Error Opening", "", null, null, null);
 
             if ("text/plain".equals(mimeType) || (uri.getPath() != null && uri.getPath().toLowerCase().endsWith(".txt"))) {
-                return new BookMetadata("TXT Book", "", null, loadTxt(is));
+                return new BookMetadata("TXT Book", "", null, loadTxt(is), null);
             } else {
                 return loadEpubWithMetadata(context, is);
             }
         } catch (Exception e) {
             Log.e("BookLoader", "Load error", e);
-            return new BookMetadata("Error", "", null, null);
+            return new BookMetadata("Error", "", null, null, null);
         }
     }
 
@@ -72,6 +86,7 @@ public class BookLoader {
 
     private BookMetadata loadEpubWithMetadata(Context context, InputStream is) {
         List<Sentence> allSentences = new ArrayList<>();
+        List<TOCItem> tocItems = new ArrayList<>();
         String title = "Unknown Book";
         String author = "";
         String coverUri = null;
@@ -80,6 +95,9 @@ public class BookLoader {
             Book book = new EpubReader().readEpub(is);
             if (!book.getMetadata().getTitles().isEmpty()) title = book.getMetadata().getTitles().get(0);
             if (!book.getMetadata().getAuthors().isEmpty()) author = book.getMetadata().getAuthors().get(0).toString();
+
+            // TOC
+            extractTOC(book.getTableOfContents(), tocItems);
 
             // Cover
             Resource coverRes = book.getCoverImage();
@@ -106,7 +124,23 @@ public class BookLoader {
 
         } catch (Exception e) { Log.e("BookLoader", "EPUB error", e); }
 
-        return new BookMetadata(title, author, coverUri, allSentences);
+        return new BookMetadata(title, author, coverUri, allSentences, tocItems);
+    }
+
+    private void extractTOC(TableOfContents toc, List<TOCItem> items) {
+        if (toc == null || toc.getTocReferences() == null) return;
+        for (TOCReference ref : toc.getTocReferences()) {
+            flattenTOC(ref, items);
+        }
+    }
+
+    private void flattenTOC(TOCReference ref, List<TOCItem> items) {
+        items.add(new TOCItem(ref.getTitle(), ref.getCompleteHref()));
+        if (ref.getChildren() != null) {
+            for (TOCReference child : ref.getChildren()) {
+                flattenTOC(child, items);
+            }
+        }
     }
 
     private String readResource(Resource res) {
