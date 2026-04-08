@@ -4,21 +4,34 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="8dp"
+    android:layout_marginHorizontal="12dp"
+    android:layout_marginVertical="6dp"
     app:cardCornerRadius="12dp"
-    app:cardElevation="6dp"
+    app:cardElevation="4dp"
     app:cardBackgroundColor="@color/white">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
+        android:gravity="center_vertical"
         android:padding="12dp">
+
+        <!-- Radio button for selection -->
+        <RadioButton
+            android:id="@+id/radioButtonSelect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="16dp"
+            android:clickable="false"
+            android:focusable="false"
+            android:buttonTint="@color/rewindButtonColor"
+            android:visibility="gone"/>
 
         <!-- Cover / Initials -->
         <FrameLayout
-            android:layout_width="90dp"
-            android:layout_height="120dp">
+            android:layout_width="80dp"
+            android:layout_height="110dp">
 
             <ImageView
                 android:id="@+id/ivCover"
@@ -32,7 +45,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:gravity="center"
-                android:textSize="36sp"
+                android:textSize="32sp"
                 android:textStyle="bold"
                 android:textColor="@color/white"
                 android:background="@color/rewindButtonColor"

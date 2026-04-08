@@ -1,5 +1,7 @@
 package com.gugesoft.lodibookreader;
 
+import java.util.Objects;
+
 public class BookItem {
     public String uri;
     public String title;
@@ -7,7 +9,6 @@ public class BookItem {
     public String coverUri;
     public int lastSentenceIndex;
 
-    // Full constructor - this is the one we must use now
     public BookItem(String uri, String title, String author, String coverUri, int lastSentenceIndex) {
         this.uri = uri;
         this.title = (title != null && !title.isEmpty()) ? title : "Unknown Book";
@@ -16,8 +17,20 @@ public class BookItem {
         this.lastSentenceIndex = lastSentenceIndex;
     }
 
-    // Keep this old constructor only for safety (but we won't use it much)
     public BookItem(String uri, String title, int lastIndex) {
         this(uri, title, "", null, lastIndex);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        BookItem bookItem = (BookItem) o;
+        return Objects.equals(uri, bookItem.uri);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(uri);
     }
 }

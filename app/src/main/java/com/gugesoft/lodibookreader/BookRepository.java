@@ -57,4 +57,10 @@ public class BookRepository {
         }
         return null;
     }
+    public void deleteBook(BookItem item) {
+        List<BookItem> books = getBooks();
+        books.removeIf(b -> b.uri.equals(item.uri));
+        saveBooks(books);
+    }
+
 }
