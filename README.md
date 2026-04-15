@@ -22,11 +22,19 @@ Simple when you want it, powerful when you need it, and always ready to tell you
 Lodi Reader – Key Features
 
 📚 Easy book loading
+
 🗂️ Smart Shelf with auto-resume
+
 🔊 High-quality text-to-speech playback
+
 ⏸️ Auto pause when other audio plays
+
 🎧 Earphone play/pause controls
+
 😴 Sleep timer for hands-free listening
+
 📳 Shake-to-wake with confirmation bell
+
 📖 Continuous, seamless page reading
+
 ⚡ Smooth, distraction-free experience
